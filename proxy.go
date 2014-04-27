@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"io/ioutil"
@@ -245,10 +246,13 @@ func delete_handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	addr := flag.String("flag", "108.61.155.67:80", "listen address in the following format: address:port")
+	flag.Parse()
+
 	rand.Seed(9)
 
 	proxy.client = &http.Client{}
-	proxy.host = "108.61.155.67:80"
+	proxy.host = *addr
 
 	http.HandleFunc(upload_prefix, upload_handler)
 	http.HandleFunc(delete_prefix, delete_handler)
