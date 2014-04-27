@@ -1,0 +1,15 @@
+*.a
+*.a.*
+*.exp
+*.la
+*.lo
+*.o
+*.o.*
+*.py[co]
+*.so
+*.so.*
+*.tar.gz
+*~
+.*.sw*
+proxy
+delete
