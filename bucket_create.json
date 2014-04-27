@@ -1,0 +1,9 @@
+{
+	"key": "bucket:32.12",
+	"groups": [32,12],
+	"acl": [
+	],
+	"flags": 0,
+	"max-size": 0,
+	"max-key-num": 0
+}
