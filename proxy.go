@@ -13,7 +13,6 @@ import (
 
 var (
 	proxy bproxy
-	buckets []string = []string{"bucket:11.21", "bucket:22.31", "bucket:32.12"}
 
 	upload_prefix string = "/upload/"
 	delete_prefix string = "/delete/"
@@ -78,7 +77,7 @@ func (p *bproxy) backup_key(key string) string {
 }
 
 func generate_url(host, key, bucket, operation string) string {
-	return fmt.Sprintf("%s/%s/%s?bucket=%s", host, operation, key, bucket)
+	return fmt.Sprintf("http://%s/%s/%s?bucket=%s", host, operation, key, bucket)
 }
 
 func (p *bproxy) generate_url(key, bucket, operation string) string {
@@ -127,7 +126,7 @@ func upload_handler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	bucket := buckets[rand.Intn(len(buckets))]
+	bucket := Buckets[rand.Intn(len(Buckets))]
 	key := r.URL.Path[len(upload_prefix):]
 	url := proxy.generate_url(key, bucket, "upload")
 
@@ -164,14 +163,14 @@ func upload_handler(w http.ResponseWriter, r *http.Request) {
 		Bucket: bucket,
 		Primary: ent_reply{
 			Key: key,
-			Get: proxy.generate_url(key, bucket, "get"),
-			Update: url,
-			Delete: generate_url(r.Host, key, bucket, "delete"),
+			Get: "GET " + proxy.generate_url(key, bucket, "get"),
+			Update: "POST " + url,
+			Delete: "POST " + generate_url(r.Host, key, bucket, "delete"),
 			Reply: string(ret_primary),
 		},
 		Backup: ent_reply{
 			Key: backup_key,
-			Get: proxy.generate_url(backup_key, bucket, "get"),
+			Get: "GET " + proxy.generate_url(backup_key, bucket, "get"),
 			Reply: string(ret_backup),
 		},
 	}
@@ -207,15 +206,26 @@ func delete_handler(w http.ResponseWriter, r *http.Request) {
 
 	type update struct {
 		Id string `json:"id"`
-		Indexes map[string]string `json:"indexes"`
+		Indexes map[string][]byte `json:"indexes"`
 	}
 
-	del_time := time.Now().Add(2 * 24 * 3600 * time.Second).Unix()
+	entry := &Delentry{
+		time: time.Now().Add(2 * 24 * 3600 * time.Second).Unix(),
+		key: backup_key,
+	}
+
+	index_data, err := entry.pack()
+	if err != nil {
+		err := NewKeyError(r.URL.String(), http.StatusBadRequest, []byte(fmt.Sprintf("could not pack delete entry: %v", err)))
+		log.Printf("%s", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	update_json := update{
 		Id: backup_key,
-		Indexes: map[string]string {
-			"delete" : fmt.Sprintf("%s", del_time),
+		Indexes: map[string][]byte {
+			DeleteIndex : index_data,
 		},
 	}
 
@@ -238,7 +248,7 @@ func main() {
 	rand.Seed(9)
 
 	proxy.client = &http.Client{}
-	proxy.host = "http://108.61.155.67:80"
+	proxy.host = "108.61.155.67:80"
 
 	http.HandleFunc(upload_prefix, upload_handler)
 	http.HandleFunc(delete_prefix, delete_handler)
