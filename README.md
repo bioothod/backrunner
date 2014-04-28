@@ -38,4 +38,4 @@ $ proxy -remote=108.61.155.67:80 -listen=:9090
 Proxy will run on 9090 port and forward requests to `-addr` host (please note, you should not use 'http://' scheme there, it will be added automatically.
 `-help` displays all supported options.
 
-Please note that every new key being uploaded is actually written 4 times into the storage: 2 primary and 2 backup copies are being made. That's why writing a huge objects may take a while.
+Please note that every new key being uploaded is actually written 4 times into the storage by proxy: 2 primary and 2 backup copies are made. That's why writing a huge objects may take a little while.
