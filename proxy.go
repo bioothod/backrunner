@@ -246,18 +246,19 @@ func delete_handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	addr := flag.String("flag", "108.61.155.67:80", "listen address in the following format: address:port")
+	remote := flag.String("remote", "108.61.155.67:80", "connect to the RIFT proxy on given address in the following format: address:port")
+	listen := flag.String("listen", ":9090", "listen and serve address")
 	flag.Parse()
 
 	rand.Seed(9)
 
 	proxy.client = &http.Client{}
-	proxy.host = *addr
+	proxy.host = *remote
 
 	http.HandleFunc(upload_prefix, upload_handler)
 	http.HandleFunc(delete_prefix, delete_handler)
 
-	err := http.ListenAndServe(":9090", nil)
+	err := http.ListenAndServe(*listen, nil)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}

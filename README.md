@@ -25,14 +25,15 @@ $ go build -a delete.go buckets.go
 $ delete -remote=108.61.155.67:1025:2
 ```
 
-It will automatically find out all buckets from metadata groups, access their data groups, list objects and remote appropriate objects
-`-help` displays additional options
+It will automatically find out all buckets from metadata groups, access their data groups, list objects and remote appropriate objects.
+`-help` displays all supported options.
 
 Proxy build
 ====================
 ```
 $ go build -a proxy.go buckets.go
-$ proxy -addr=108.61.155.67:80
+$ proxy -remote=108.61.155.67:80 -listen=:9090
 ```
 
-`-help` displays additional options
+Proxy will run on 9090 port and forward requests to `-addr` host (please note, you should not use 'http://' scheme there, it will be added automatically.
+`-help` displays all supported options.
