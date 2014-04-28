@@ -39,3 +39,10 @@ Proxy will run on 9090 port and forward requests to `-addr` host (please note, y
 `-help` displays all supported options.
 
 Please note that every new key being uploaded is actually written 4 times into the storage by proxy: 2 primary and 2 backup copies are made. That's why writing a huge objects may take a little while.
+
+Example:
+```
+$ curl -o /dev/stdout --data-binary @test.100m "http://108.61.155.67:9090/upload/test1.100m"
+```
+
+You will receive a json telling you where your file was placed. If you run the same command again it can rewrite your data and your backup copy. If you only want to update primary key, you must use `primary::update` URL from received json.
