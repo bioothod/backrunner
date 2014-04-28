@@ -17,6 +17,7 @@ var (
 
 	upload_prefix string = "/upload/"
 	delete_prefix string = "/delete/"
+	ping_prefix string = "/ping/"
 )
 
 type KeyError struct {
@@ -245,6 +246,10 @@ func delete_handler(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, string(ret), http.StatusOK)
 }
 
+func ping_handler(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "Ping OK", http.StatusOK)
+}
+
 func main() {
 	remote := flag.String("remote", "108.61.155.67:80", "connect to the RIFT proxy on given address in the following format: address:port")
 	listen := flag.String("listen", ":9090", "listen and serve address")
@@ -257,6 +262,7 @@ func main() {
 
 	http.HandleFunc(upload_prefix, upload_handler)
 	http.HandleFunc(delete_prefix, delete_handler)
+	http.HandleFunc(ping_prefix, ping_handler)
 
 	err := http.ListenAndServe(*listen, nil)
 	if err != nil {
