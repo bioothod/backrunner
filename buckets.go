@@ -5,20 +5,20 @@ import (
 )
 
 var (
-	DeleteIndex string = "delete"
-	BucketNamespace string = "bucket"
-	Buckets []string = []string{"bucket:11.21", "bucket:22.31", "bucket:32.12"}
+	DeleteIndex     string   = "delete"
+	BucketNamespace string   = "bucket"
+	Buckets         []string = []string{"bucket:12.21", "bucket:22.31", "bucket:32.11"}
 )
 
 type Delentry struct {
 	time int64
-	key string
+	key  string
 }
 
 func (del *Delentry) pack() ([]byte, error) {
 	in := map[string]interface{}{
 		"time": del.time,
-		"key": del.key,
+		"key":  del.key,
 	}
 	return msgpack.Marshal(in)
 }
