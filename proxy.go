@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
 	"io/ioutil"
+	"log"
 	"math/rand"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -17,13 +18,13 @@ var (
 
 	upload_prefix string = "/upload/"
 	delete_prefix string = "/delete/"
-	ping_prefix string = "/ping/"
+	ping_prefix   string = "/ping/"
 )
 
 type KeyError struct {
-	url string
+	url    string
 	status int
-	data []byte
+	data   []byte
 }
 
 func (k *KeyError) Error() string {
@@ -32,15 +33,16 @@ func (k *KeyError) Error() string {
 
 func NewKeyError(url string, status int, data []byte) error {
 	return &KeyError{
-		url: url,
+		url:    url,
 		status: status,
-		data: data,
+		data:   data,
 	}
 }
 
 type bproxy struct {
-	host string
+	host   string
 	client *http.Client
+	backup bool
 }
 
 func (p *bproxy) upload_one(url string, data []byte) (ret []byte, err error) {
@@ -79,14 +81,14 @@ func (p *bproxy) backup_key(key string) string {
 }
 
 func generate_url(host, key, bucket, operation string) string {
-	return fmt.Sprintf("http://%s/%s/%s?bucket=%s", host, operation, key, bucket)
+	return fmt.Sprintf("http://%s/%s/%s/%s", host, operation, bucket, key)
 }
 
 func (p *bproxy) generate_url(key, bucket, operation string) string {
 	return generate_url(p.host, key, bucket, operation)
 }
 
-func (p *bproxy) remove_one(key, bucket string) (ret []byte, err error) {
+func (p *bproxy) remove_one(key, bucket string) (ret []byte, status int, err error) {
 	url := p.generate_url(key, bucket, "delete")
 
 	req, err := http.NewRequest("POST", url, nil)
@@ -96,6 +98,7 @@ func (p *bproxy) remove_one(key, bucket string) (ret []byte, err error) {
 	}
 
 	resp, err := p.client.Do(req)
+	status = resp.StatusCode
 	if err != nil {
 		log.Printf("url: %s: post failed: %q", url, err)
 		return
@@ -138,43 +141,46 @@ func upload_handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	backup_key := proxy.backup_key(key)
-	backup_url := proxy.generate_url(backup_key, bucket, "upload")
-	ret_backup, err := proxy.upload_one(backup_url, data)
-	if err != nil {
-		_, _ = proxy.remove_one(key, bucket)
-
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
 	type ent_reply struct {
-		Get string `json:"get"`
+		Get    string `json:"get"`
 		Update string `json:"update"`
 		Delete string `json:"delete"`
-		Key string `json:"key"`
-		Reply string `json:"reply"`
+		Key    string `json:"key"`
+		Reply  string `json:"reply"`
 	}
 	type upload_reply struct {
-		Bucket string `json:"bucket"`
+		Bucket  string    `json:"bucket"`
 		Primary ent_reply `json:"primary"`
-		Backup ent_reply `json:"backup"`
+		Backup  ent_reply `json:"backup"`
 	}
 
 	reply := upload_reply{
 		Bucket: bucket,
 		Primary: ent_reply{
-			Key: key,
-			Get: "GET " + proxy.generate_url(key, bucket, "get"),
+			Key:    key,
+			Get:    "GET " + proxy.generate_url(key, bucket, "get"),
 			Update: "POST " + url,
 			Delete: "POST " + generate_url(r.Host, key, bucket, "delete"),
-			Reply: string(ret_primary),
+			Reply:  string(ret_primary),
 		},
-		Backup: ent_reply{
-			Key: backup_key,
-			Get: "GET " + proxy.generate_url(backup_key, bucket, "get"),
+	}
+
+	backup_key := proxy.backup_key(key)
+	if proxy.backup {
+		backup_url := proxy.generate_url(backup_key, bucket, "upload")
+		ret_backup, err := proxy.upload_one(backup_url, data)
+		if err != nil {
+			proxy.remove_one(key, bucket)
+
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		reply.Backup = ent_reply{
+			Key:   backup_key,
+			Get:   "GET " + proxy.generate_url(backup_key, bucket, "get"),
 			Reply: string(ret_backup),
-		},
+		}
 	}
 
 	reply_json, err := json.Marshal(reply)
@@ -190,30 +196,37 @@ func upload_handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func delete_handler(w http.ResponseWriter, r *http.Request) {
-	key := r.URL.Path[len(delete_prefix):]
+	pc := strings.Split(r.URL.Path, "/")
 
-	q := r.URL.Query()
-	bucket := q.Get("bucket")
-	if len(bucket) == 0 {
-		err := NewKeyError(r.URL.String(), http.StatusBadRequest, []byte("there is no 'bucket' URI parameter"))
-		log.Printf("%s", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	bucket := pc[2]
+	key := strings.Join(pc[3:], "/")
+
+	ret, status, err := proxy.remove_one(key, bucket)
+
+	if err != nil {
+		if status == http.StatusOK {
+			status = http.StatusBadRequest
+		}
+		http.Error(w, string(ret), status)
 		return
 	}
 
-	proxy.remove_one(key, bucket)
+	if !proxy.backup {
+		http.Error(w, "Successfully removed key '"+key+"': "+string(ret), http.StatusOK)
+		return
+	}
 
 	backup_key := proxy.backup_key(key)
 	backup_url := proxy.generate_url(backup_key, bucket, "update")
 
 	type update struct {
-		Id string `json:"id"`
+		Id      string            `json:"id"`
 		Indexes map[string][]byte `json:"indexes"`
 	}
 
 	entry := &Delentry{
 		time: time.Now().Add(2 * 24 * 3600 * time.Second).Unix(),
-		key: backup_key,
+		key:  backup_key,
 	}
 
 	index_data, err := entry.pack()
@@ -226,8 +239,8 @@ func delete_handler(w http.ResponseWriter, r *http.Request) {
 
 	update_json := update{
 		Id: backup_key,
-		Indexes: map[string][]byte {
-			DeleteIndex : index_data,
+		Indexes: map[string][]byte{
+			DeleteIndex: index_data,
 		},
 	}
 
@@ -237,7 +250,7 @@ func delete_handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ret, err := proxy.upload_one(backup_url, update_bytes)
+	ret, err = proxy.upload_one(backup_url, update_bytes)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -253,12 +266,14 @@ func ping_handler(w http.ResponseWriter, r *http.Request) {
 func main() {
 	remote := flag.String("remote", "108.61.155.67:80", "connect to the RIFT proxy on given address in the following format: address:port")
 	listen := flag.String("listen", ":9090", "listen and serve address")
+	backup := flag.Bool("backup", false, "enable backup copy")
 	flag.Parse()
 
 	rand.Seed(9)
 
 	proxy.client = &http.Client{}
 	proxy.host = *remote
+	proxy.backup = *backup
 
 	http.HandleFunc(upload_prefix, upload_handler)
 	http.HandleFunc(delete_prefix, delete_handler)
