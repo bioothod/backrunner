@@ -40,9 +40,10 @@ func NewKeyError(url string, status int, data []byte) error {
 }
 
 type bproxy struct {
-	host   string
-	client *http.Client
-	backup bool
+	host	string
+	client	*http.Client
+	backup	bool
+	acl	map[string]BucketACL
 }
 
 func (p *bproxy) upload_one(url string, data []byte) (ret []byte, err error) {
@@ -122,10 +123,61 @@ func (p *bproxy) remove_one(key, bucket string) (ret []byte, status int, err err
 	return
 }
 
+func (p *bproxy) auth_check(r *http.Request, flags uint64) bool {
+	if p.acl == nil {
+		return true
+	}
+
+	user := "*"
+
+	user_slice := r.URL.Query()["user"]
+	if len(user_slice) != 0 {
+		user = user_slice[0]
+	}
+
+	acl, ok := p.acl[user]
+	if !ok {
+		log.Printf("url: %s: there is no user '%s' in ACL\n", r.URL, user)
+		return false
+	}
+
+	if (acl.flags & flags) != 0 {
+		return true
+	}
+
+	auth_header_str := "Authorization"
+	auth_headers, ok := r.Header[auth_header_str]
+	if !ok {
+		log.Printf("url: %s: there is no '%s' header\n", r.URL, auth_header_str)
+		return false
+	}
+
+	recv_auth := auth_headers[0]
+	calc_auth, err := GenerateSignature(acl.token, r.Method, r.URL, r.Header)
+	if err != nil {
+		log.Printf("url: %s: hmac generation failed: %s\n", r.URL, err)
+		return false
+	}
+
+	if recv_auth != calc_auth {
+		log.Printf("url: %s: hmac mismatch: recv: '%s', calc: '%s'\n", r.URL, recv_auth, calc_auth)
+		return false
+	}
+
+	return true
+}
+
 func upload_handler(w http.ResponseWriter, r *http.Request) {
+	// flags=2 - noauth-write flag, for more details see RIFT rift_noauth_flags enum
+	if !proxy.auth_check(r, 2) {
+		log.Printf("url: %s: auth check failed\n", r.URL)
+		http.Error(w, "auth check failed", http.StatusForbidden)
+		return
+	}
+
 	data, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		log.Printf("url: %s: readall failed: %q", r.URL, err)
+		log.Printf("url: %s: readall failed: %q\n", r.URL, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -196,6 +248,13 @@ func upload_handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func delete_handler(w http.ResponseWriter, r *http.Request) {
+	// flags=2 - noauth-write flag, for more details see RIFT rift_noauth_flags enum
+	if !proxy.auth_check(r, 2) {
+		log.Printf("url: %s: auth check failed\n", r.URL)
+		http.Error(w, "auth check failed", http.StatusForbidden)
+		return
+	}
+
 	pc := strings.Split(r.URL.Path, "/")
 
 	bucket := pc[2]
@@ -267,6 +326,7 @@ func main() {
 	remote := flag.String("remote", "108.61.155.67:80", "connect to the RIFT proxy on given address in the following format: address:port")
 	listen := flag.String("listen", ":9090", "listen and serve address")
 	backup := flag.Bool("backup", false, "enable backup copy")
+	acl := flag.String("acl", "", "ACL file in the same JSON format as RIFT buckets")
 	flag.Parse()
 
 	rand.Seed(9)
@@ -274,6 +334,15 @@ func main() {
 	proxy.client = &http.Client{}
 	proxy.host = *remote
 	proxy.backup = *backup
+	proxy.acl = nil
+
+	if *acl != "" {
+		var err error
+		proxy.acl, err = BucketACL_Extract_JSON_File(*acl)
+		if err != nil {
+			log.Fatal("ACL: ", err)
+		}
+	}
 
 	http.HandleFunc(upload_prefix, upload_handler)
 	http.HandleFunc(delete_prefix, delete_handler)
