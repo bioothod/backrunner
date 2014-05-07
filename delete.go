@@ -12,57 +12,6 @@ import (
 	"time"
 )
 
-type bucket_acl struct {
-	version int32
-	user string
-	token string
-	flags uint64
-}
-type bucket_meta struct {
-	version int32
-	bucket string
-	acl map[string]bucket_acl
-	groups []int32
-	flags uint64
-	max_size uint64
-	max_key_num uint64
-	reserved [3]uint64
-}
-
-type extract_error struct {
-	reason string
-	out []interface{}
-}
-
-func (err *extract_error) Error() string {
-	return fmt.Sprintf("%s: %v", err.reason, err.out)
-}
-
-func (meta *bucket_meta) extract(out []interface{}) (err error) {
-	if len(out) < 8 {
-		return &extract_error{
-			reason: fmt.Sprintf("array length: %d, must be at least 8", len(out)),
-			out: out,
-		}
-	}
-	meta.version = int32(out[0].(int64))
-	if meta.version != 1 {
-		return &extract_error{
-			reason: fmt.Sprintf("unsupported metadata version %d", meta.version),
-			out: out,
-		}
-	}
-	meta.bucket = out[1].(string)
-	for _, x := range out[3].([]interface{}) {
-		meta.groups = append(meta.groups, int32(x.(int64)))
-	}
-	meta.flags = uint64(out[4].(int64))
-	meta.max_size = uint64(out[5].(int64))
-	meta.max_key_num = uint64(out[6].(int64))
-
-	return nil
-}
-
 func main() {
 	remote := flag.String("remote", "", "remote address in the standard elliptics format: addr:port:family")
 	logfile := flag.String("log", "/tmp/backrunner-delete-go.log", "elliptics log file")
@@ -119,7 +68,7 @@ func main() {
 
 	for _, bucket := range Buckets {
 		fmt.Printf("bucket: %s: reading metadata\n", bucket)
-		var meta bucket_meta
+		var meta BucketMeta
 		var out []interface{}
 		for rd := range metadata_session.ReadData(bucket) {
 			if rd.Error() == nil {
@@ -129,7 +78,7 @@ func main() {
 				}
 			}
 
-			err = meta.extract(out)
+			err = meta.ExtractMsgpack(out)
 			if err != nil {
 				log.Fatal("Unsupported msgpack data:", err)
 			}
