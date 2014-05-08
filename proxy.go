@@ -40,10 +40,10 @@ func NewKeyError(url string, status int, data []byte) error {
 }
 
 type bproxy struct {
-	host	string
-	client	*http.Client
-	backup	bool
-	acl	map[string]BucketACL
+	host   string
+	client *http.Client
+	backup bool
+	acl    map[string]BucketACL
 }
 
 func (p *bproxy) upload_one(url string, data []byte) (ret []byte, err error) {
@@ -256,6 +256,11 @@ func delete_handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pc := strings.Split(r.URL.Path, "/")
+	if len(pc) < 2 {
+		log.Printf("url: %s: invalid URL, there must be at least 2 components in the path\n", r.URL)
+		http.Error(w, "invalid URL, there must be at least 2 components in the path", http.StatusBadRequest)
+		return
+	}
 
 	bucket := pc[2]
 	key := strings.Join(pc[3:], "/")
