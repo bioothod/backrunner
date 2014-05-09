@@ -4,14 +4,33 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/vmihailenco/msgpack"
+	"io/ioutil"
 	"os"
+	"strings"
 )
 
 var (
 	DeleteIndex     string   = "delete"
 	BucketNamespace string   = "bucket"
-	Buckets         []string = []string{"bucket:12.21", "bucket:22.31", "bucket:32.11"}
+	Buckets         []string
 )
+
+func BucketsInit(path string) (err error) {
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		return
+	}
+
+	Buckets = make([]string, 0, 10)
+	for _, str := range strings.Split(string(data), "\n") {
+		if len(str) > 0 {
+			Buckets = append(Buckets, str)
+			fmt.Printf("bucket: %s\n", str)
+		}
+	}
+
+	return nil
+}
 
 type Delentry struct {
 	time int64

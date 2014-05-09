@@ -1,7 +1,16 @@
 {
-	"key": "bucket:32.12",
 	"groups": [32,12],
 	"acl": [
+		{
+			"user": "*",
+			"token": "secure unused wildcard token",
+			"flags": 1
+		},
+		{
+			"user": "coub_writer",
+			"token": "secure token",
+			"flags": 0
+		}
 	],
 	"flags": 0,
 	"max-size": 0,

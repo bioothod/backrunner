@@ -1,0 +1,12 @@
+[
+	{
+		"user": "*",
+		"token": "secure unused wildcard token",
+		"flags": 1
+	},
+	{
+		"user": "coub_writer",
+		"token": "secure token",
+		"flags": 0
+	}
+]
