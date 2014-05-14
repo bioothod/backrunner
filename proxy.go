@@ -81,6 +81,7 @@ func (r *request) send() (err error) {
 
 	req, err := http.NewRequest("POST", r.url, buf)
 	if err != nil {
+		r.status = http.StatusPreconditionFailed
 		log.Printf("url: %s: new request failed: %q", r.url, err)
 		return
 	}
@@ -88,6 +89,7 @@ func (r *request) send() (err error) {
 	req.URL.RawQuery = r.query.Encode()
 	sign, err := r.proxy.generate_signature(req)
 	if err != nil {
+		r.status = http.StatusForbidden
 		return
 	}
 
@@ -95,6 +97,7 @@ func (r *request) send() (err error) {
 
 	resp, err := r.proxy.client.Do(req)
 	if err != nil {
+		r.status = http.StatusTeapot
 		log.Printf("url: %s: post failed: %q", req.URL, err)
 		return
 	}
@@ -184,14 +187,14 @@ func upload_handler(w http.ResponseWriter, r *http.Request) {
 
 	err := proxy.auth_check(r)
 	if err != nil {
-		log.Printf("%s\n", err.Error())
+		log.Printf("url: %s: upload: auth check failed: %q\n", r.URL, err)
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 
 	data, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		log.Printf("url: %s: readall failed: %q\n", r.URL, err)
+		log.Printf("url: %s: upload: readall failed: %q\n", r.URL, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -205,6 +208,7 @@ func upload_handler(w http.ResponseWriter, r *http.Request) {
 
 	err = req.send()
 	if err != nil {
+		log.Printf("url: %s: upload: send failed: %q\n", r.URL, err)
 		http.Error(w, err.Error(), req.status)
 		return
 	}
@@ -243,6 +247,8 @@ func upload_handler(w http.ResponseWriter, r *http.Request) {
 		req.url = proxy.generate_url(backup_key, bucket, "upload")
 		err = req.send()
 		if err != nil {
+			log.Printf("url: %s: upload: backup send failed: %q\n", r.URL, err)
+
 			req.url = proxy.generate_url(key, bucket, "delete")
 			req.send()
 
@@ -259,6 +265,8 @@ func upload_handler(w http.ResponseWriter, r *http.Request) {
 
 	reply_json, err := json.Marshal(reply)
 	if err != nil {
+		log.Printf("url: %s: upload: json marshal failed: %q\n", r.URL, err)
+
 		req.url = proxy.generate_url(key, bucket, "delete")
 		req.send()
 
@@ -279,15 +287,16 @@ func delete_handler(w http.ResponseWriter, r *http.Request) {
 
 	err := proxy.auth_check(r)
 	if err != nil {
-		log.Printf("%s\n", err.Error())
+		log.Printf("url: %s: delete: auth check failed: %q\n", r.URL, err)
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 
 	pc := strings.Split(r.URL.Path, "/")
 	if len(pc) < 2 {
-		log.Printf("url: %s: invalid URL, there must be at least 2 components in the path\n", r.URL)
-		http.Error(w, "invalid URL, there must be at least 2 components in the path", http.StatusBadRequest)
+		tmp := fmt.Sprintf("url: %s: delete: invalid URL, there must be at least 2 components in the path\n", r.URL)
+		log.Printf("%s\n", tmp)
+		http.Error(w, tmp, http.StatusBadRequest)
 		return
 	}
 
@@ -299,10 +308,14 @@ func delete_handler(w http.ResponseWriter, r *http.Request) {
 
 	err = req.send()
 	if err != nil {
+		log.Printf("url: %s: delete: delete request failed: %q\n", r.URL, err)
+
 		if req.status == http.StatusOK {
 			req.status = http.StatusBadRequest
 		}
-		http.Error(w, string(req.reply), req.status)
+
+		str := string(req.reply) + "\n" + err.Error()
+		http.Error(w, str, req.status)
 		return
 	}
 
@@ -326,7 +339,7 @@ func delete_handler(w http.ResponseWriter, r *http.Request) {
 	index_data, err := entry.pack()
 	if err != nil {
 		err := NewKeyError(r.URL.String(), http.StatusBadRequest, []byte(fmt.Sprintf("could not pack delete entry: %v", err)))
-		log.Printf("%s", err)
+		log.Printf("url: %s: delete: pack failed: %q", r.URL, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -341,12 +354,14 @@ func delete_handler(w http.ResponseWriter, r *http.Request) {
 	req.url = proxy.generate_url(backup_key, bucket, "update")
 	req.data, err = json.Marshal(update_json)
 	if err != nil {
+		log.Printf("url: %s: delete: json marshal failed: %q", r.URL, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	err = req.send()
 	if err != nil {
+		log.Printf("url: %s: delete: backup index update send failed: %q", r.URL, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
