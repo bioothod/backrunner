@@ -295,11 +295,15 @@ func ping_handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	remote := flag.String("remote", "108.61.155.67:80", "connect to the RIFT proxy on given address in the following format: address:port")
+	remote := flag.String("remote", "", "connect to the RIFT proxy on given address in the following format: address:port")
 	listen := flag.String("listen", ":9090", "listen and serve address")
 	buckets := flag.String("buckets", "", "buckets file (file format: new-line separated list of bucket names)")
 	acl := flag.String("acl", "", "ACL file in the same JSON format as RIFT buckets")
 	flag.Parse()
+
+	if *remote == "" {
+		log.Fatal("no remote nodes specified")
+	}
 
 	if *buckets == "" {
 		log.Fatal("there is no bucket file")
