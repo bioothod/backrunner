@@ -294,15 +294,31 @@ func ping_handler(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "Ping OK", http.StatusOK)
 }
 
+type stringslice []string
+
+func (str *stringslice) String() string {
+	return fmt.Sprintf("%d", *str)
+}
+
+func (str *stringslice) Set(value string) error {
+	*str = append(*str, value)
+	return nil
+}
+
 func main() {
-	remote := flag.String("remote", "", "connect to the RIFT proxy on given address in the following format: address:port")
+	var remotes stringslice
+	flag.Var(&remotes, "remote", "connect to the RIFT proxy on given address in the following format: address:port")
 	listen := flag.String("listen", ":9090", "listen and serve address")
 	buckets := flag.String("buckets", "", "buckets file (file format: new-line separated list of bucket names)")
 	acl := flag.String("acl", "", "ACL file in the same JSON format as RIFT buckets")
 	flag.Parse()
 
-	if *remote == "" {
+	if len(remotes) == 0 {
 		log.Fatal("no remote nodes specified")
+	}
+
+	for _, r := range remotes {
+		fmt.Printf("remote: %s\n", r)
 	}
 
 	if *buckets == "" {
@@ -317,7 +333,7 @@ func main() {
 	rand.Seed(9)
 
 	proxy.client = &http.Client{}
-	proxy.host = *remote
+	proxy.host = remotes[0]
 	proxy.acl = nil
 
 	if *acl != "" {
