@@ -1,10 +1,11 @@
 package main
 
 import (
-	"bytes"
+	//"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -18,7 +19,6 @@ var (
 	proxy bproxy
 
 	upload_prefix string = "/upload/"
-	delete_prefix string = "/delete/"
 	ping_prefix   string = "/ping/"
 
 	auth_header_str string = "Authorization"
@@ -34,12 +34,14 @@ func (k *KeyError) Error() string {
 	return fmt.Sprintf("url: %s: error code: %d, returned data: '%s'", k.url, k.status, fmt.Sprintf("%s", k.data))
 }
 
-func NewKeyError(url string, status int, data []byte) error {
-	return &KeyError{
+func NewKeyError(url string, status int, data []byte) (err error) {
+	err = &KeyError{
 		url:    url,
 		status: status,
 		data:   data,
 	}
+	log.Printf("%s", err)
+	return
 }
 
 type bproxy struct {
@@ -53,7 +55,7 @@ type request struct {
 	url string
 	user string
 	query url.Values
-	data  []byte
+	data  io.Reader
 
 	reply  []byte
 	status int
@@ -72,60 +74,8 @@ func (p *bproxy) proxy_request(req *http.Request) (new_req request) {
 	return
 }
 
-func (r *request) send() (err error) {
-	buf := bytes.NewBuffer([]byte{})
-
-	if r.data != nil {
-		buf = bytes.NewBuffer(r.data)
-	}
-
-	req, err := http.NewRequest("POST", r.url, buf)
-	if err != nil {
-		r.status = http.StatusPreconditionFailed
-		log.Printf("url: %s: new request failed: %q", r.url, err)
-		return
-	}
-
-	req.URL.RawQuery = r.query.Encode()
-	sign, err := r.proxy.generate_signature(r.user, req)
-	if err != nil {
-		r.status = http.StatusForbidden
-		return
-	}
-
-	req.Header[auth_header_str] = []string{"riftv1 " + r.user + ":" + sign}
-
-	resp, err := r.proxy.client.Do(req)
-	if err != nil {
-		r.status = http.StatusTeapot
-		log.Printf("url: %s: post failed: %q", req.URL, err)
-		return
-	}
-	defer resp.Body.Close()
-
-	r.status = resp.StatusCode
-
-	r.reply, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("url: %s: readall response failed: %q", req.URL, err)
-		return
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		err = NewKeyError(req.URL.String(), resp.StatusCode, r.reply)
-		log.Printf("%s", err)
-		return
-	}
-
-	return
-}
-
-func generate_url(host, key, bucket, operation string) string {
-	return fmt.Sprintf("http://%s/%s/%s/%s", host, operation, bucket, key)
-}
-
 func (p *bproxy) generate_url(key, bucket, operation string) string {
-	return generate_url(p.host, key, bucket, operation)
+	return fmt.Sprintf("http://%s/%s/%s/%s", p.host, operation, bucket, key)
 }
 
 func (p *bproxy) generate_signature(user string, r *http.Request) (sign string, err error) {
@@ -188,41 +138,69 @@ func (p *bproxy) auth_check(r *http.Request) (user string, err error) {
 	return user, nil
 }
 
-func upload_handler(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
-
-	user, err := proxy.auth_check(r)
+func upload_handler(w http.ResponseWriter, req *http.Request) {
+	user, err := proxy.auth_check(req)
 	if err != nil {
-		log.Printf("url: %s: upload: auth check failed: %q\n", r.URL, err)
+		log.Printf("url: %s: upload: auth check failed: %q\n", req.URL, err)
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 
-	data, err := ioutil.ReadAll(r.Body)
+	bucket := Buckets[rand.Intn(len(Buckets))]
+	key := req.URL.Path[len(upload_prefix):]
+
+	req.URL, err = url.Parse(proxy.generate_url(key, bucket, "upload"))
 	if err != nil {
-		log.Printf("url: %s: upload: readall failed: %q\n", r.URL, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	bucket := Buckets[rand.Intn(len(Buckets))]
-	key := r.URL.Path[len(upload_prefix):]
-
-	req := proxy.proxy_request(r)
-	req.url = proxy.generate_url(key, bucket, "upload")
-	req.data = data
-	req.user = user
-
-	err = req.send()
+	sign, err := proxy.generate_signature(user, req)
 	if err != nil {
-		log.Printf("url: %s: upload: send failed: %q\n", r.URL, err)
-		http.Error(w, err.Error(), req.status)
+		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 
-	query := "?" + req.query.Encode()
-	if len(query) == 1 {
-		query = ""
+	req.Header[auth_header_str] = []string{"riftv1 " + user + ":" + sign}
+
+
+	req.RequestURI = ""
+	resp, err := proxy.client.Do(req)
+	if err != nil {
+		log.Printf("url: %s: post failed: %q", req.URL, err)
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	defer resp.Body.Close()
+
+	rift_reply, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("url: %s: readall response failed: %q", req.URL, err)
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		err = NewKeyError(req.URL.String(), resp.StatusCode, rift_reply)
+		http.Error(w, err.Error(), resp.StatusCode)
+		return
+	}
+
+	var rift_json interface{}
+	err = json.Unmarshal(rift_reply, &rift_json)
+	if err != nil {
+		rift_json = nil
+
+		log.Printf("url: %s: upload: can not unmarshall rift reply: '%s', error: %q\n", req.URL, rift_reply, err)
+	}
+
+	query := ""
+	if len(req.URL.RawQuery) != 0 {
+		query = "?" + req.URL.RawQuery
+	}
+
+	if len(req.URL.Fragment) != 0 {
+		query += "#" + req.URL.Fragment
 	}
 
 	type ent_reply struct {
@@ -230,77 +208,32 @@ func upload_handler(w http.ResponseWriter, r *http.Request) {
 		Update string `json:"update"`
 		Delete string `json:"delete"`
 		Key    string `json:"key"`
-		Reply  string `json:"reply"`
 	}
 	type upload_reply struct {
 		Bucket  string    `json:"bucket"`
 		Primary ent_reply `json:"primary"`
+		Reply  *interface{} `json:"reply"`
 	}
 
 	reply := upload_reply{
 		Bucket: bucket,
+		Reply:  &rift_json,
 		Primary: ent_reply{
 			Key:    key,
 			Get:    "GET " + proxy.generate_url(key, bucket, "get"),
-			Update: "POST " + req.url + query,
+			Update: "POST " + req.URL.String() + query,
 			Delete: "POST " + proxy.generate_url(key, bucket, "delete"),
-			Reply:  string(req.reply),
 		},
 	}
 
 	reply_json, err := json.Marshal(reply)
 	if err != nil {
-		log.Printf("url: %s: upload: json marshal failed: %q\n", r.URL, err)
-
-		req.url = proxy.generate_url(key, bucket, "delete")
-		req.send()
-
+		log.Printf("url: %s: upload: json marshal failed: %q\n", req.URL, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	http.Error(w, string(reply_json), http.StatusOK)
-}
-
-func delete_handler(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
-
-	user, err := proxy.auth_check(r)
-	if err != nil {
-		log.Printf("url: %s: delete: auth check failed: %q\n", r.URL, err)
-		http.Error(w, err.Error(), http.StatusForbidden)
-		return
-	}
-
-	pc := strings.Split(r.URL.Path, "/")
-	if len(pc) < 2 {
-		tmp := fmt.Sprintf("url: %s: delete: invalid URL, there must be at least 2 components in the path\n", r.URL)
-		log.Printf("%s\n", tmp)
-		http.Error(w, tmp, http.StatusBadRequest)
-		return
-	}
-
-	bucket := pc[2]
-	key := strings.Join(pc[3:], "/")
-
-	req := proxy.proxy_request(r)
-	req.url = proxy.generate_url(key, bucket, "delete")
-	req.user = user
-
-	err = req.send()
-	if err != nil {
-		log.Printf("url: %s: delete: delete request failed: %q\n", r.URL, err)
-
-		if req.status == http.StatusOK {
-			req.status = http.StatusBadRequest
-		}
-
-		str := string(req.reply) + "\n" + err.Error()
-		http.Error(w, str, req.status)
-		return
-	}
-
-	http.Error(w, "Successfully removed key '"+key+"': "+string(req.reply), http.StatusOK)
 }
 
 func ping_handler(w http.ResponseWriter, r *http.Request) {
@@ -358,7 +291,6 @@ func main() {
 	}
 
 	http.HandleFunc(upload_prefix, upload_handler)
-	http.HandleFunc(delete_prefix, delete_handler)
 	http.HandleFunc(ping_prefix, ping_handler)
 
 	err = http.ListenAndServe(*listen, nil)
