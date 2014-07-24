@@ -52,6 +52,7 @@ type bproxy struct {
 type request struct {
 	proxy *bproxy
 	url string
+	user string
 	query url.Values
 	data []byte
 
@@ -87,13 +88,13 @@ func (r *request) send() (err error) {
 	}
 
 	req.URL.RawQuery = r.query.Encode()
-	sign, err := r.proxy.generate_signature(req)
+	sign, err := r.proxy.generate_signature(r.user, req)
 	if err != nil {
 		r.status = http.StatusForbidden
 		return
 	}
 
-	req.Header[auth_header_str] = []string{sign}
+	req.Header[auth_header_str] = []string{"riftv1 " + r.user + ":" + sign}
 
 	resp, err := r.proxy.client.Do(req)
 	if err != nil {
@@ -132,14 +133,7 @@ func (p *bproxy) generate_url(key, bucket, operation string) string {
 	return generate_url(p.host, key, bucket, operation)
 }
 
-func (p *bproxy) generate_signature(r *http.Request) (sign string, err error) {
-	user := "*"
-
-	user_slice, ok := r.URL.Query()["user"]
-	if ok {
-		user = user_slice[0]
-	}
-
+func (p *bproxy) generate_signature(user string, r *http.Request) (sign string, err error) {
 	acl, ok := p.acl[user]
 	if !ok {
 		err = NewKeyError(r.URL.String(), http.StatusForbidden, []byte(fmt.Sprintf("url: %s: there is no user '%s' in ACL\n", r.URL, user)))
@@ -155,9 +149,11 @@ func (p *bproxy) generate_signature(r *http.Request) (sign string, err error) {
 	return
 }
 
-func (p *bproxy) auth_check(r *http.Request) (err error) {
+func (p *bproxy) auth_check(r *http.Request) (user string, err error) {
+	user = ""
+	err = nil
 	if p.acl == nil {
-		return nil
+		return
 	}
 
 	auth_headers, ok := r.Header[auth_header_str]
@@ -166,9 +162,24 @@ func (p *bproxy) auth_check(r *http.Request) (err error) {
 		return
 	}
 
-	recv_auth := auth_headers[0]
+	auth_data := strings.Split(auth_headers[0], " ")
+	if len(auth_data) != 2 {
+		err = NewKeyError(r.URL.String(), http.StatusForbidden, []byte(fmt.Sprintf("url: %s: auth header1 '%s' must be 'riftv1 user:hmac'\n",
+			r.URL, auth_headers[0])))
+		return
+	}
 
-	calc_auth, err := p.generate_signature(r)
+	auth_data = strings.Split(auth_data[1], ":")
+	if len(auth_data) != 2 {
+		err = NewKeyError(r.URL.String(), http.StatusForbidden, []byte(fmt.Sprintf("url: %s: auth header2 '%s' must be 'riftv1 user:hmac'\n",
+			r.URL, auth_headers[0])))
+		return
+	}
+
+	user = auth_data[0]
+	recv_auth := auth_data[1]
+
+	calc_auth, err := p.generate_signature(user, r)
 	if err != nil {
 		return
 	}
@@ -179,13 +190,13 @@ func (p *bproxy) auth_check(r *http.Request) (err error) {
 		return
 	}
 
-	return nil
+	return user, nil
 }
 
 func upload_handler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	err := proxy.auth_check(r)
+	user, err := proxy.auth_check(r)
 	if err != nil {
 		log.Printf("url: %s: upload: auth check failed: %q\n", r.URL, err)
 		http.Error(w, err.Error(), http.StatusForbidden)
@@ -205,6 +216,7 @@ func upload_handler(w http.ResponseWriter, r *http.Request) {
 	req := proxy.proxy_request(r)
 	req.url = proxy.generate_url(key, bucket, "upload")
 	req.data = data
+	req.user = user
 
 	err = req.send()
 	if err != nil {
@@ -285,7 +297,7 @@ func upload_handler(w http.ResponseWriter, r *http.Request) {
 func delete_handler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	err := proxy.auth_check(r)
+	user, err := proxy.auth_check(r)
 	if err != nil {
 		log.Printf("url: %s: delete: auth check failed: %q\n", r.URL, err)
 		http.Error(w, err.Error(), http.StatusForbidden)
@@ -305,6 +317,7 @@ func delete_handler(w http.ResponseWriter, r *http.Request) {
 
 	req := proxy.proxy_request(r)
 	req.url = proxy.generate_url(key, bucket, "delete")
+	req.user = user
 
 	err = req.send()
 	if err != nil {
