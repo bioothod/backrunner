@@ -9,11 +9,15 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
+	"runtime"
 	"strings"
-	//"time"
+	"time"
 )
+
+const DEFAULT_IDLE_TIMEOUT = 5 * time.Second
 
 var (
 	proxy bproxy
@@ -52,8 +56,8 @@ type bproxy struct {
 
 type request struct {
 	proxy *bproxy
-	url string
-	user string
+	url   string
+	user  string
 	query url.Values
 	data  io.Reader
 
@@ -163,7 +167,6 @@ func upload_handler(w http.ResponseWriter, req *http.Request) {
 
 	req.Header[auth_header_str] = []string{"riftv1 " + user + ":" + sign}
 
-
 	req.RequestURI = ""
 	resp, err := proxy.client.Do(req)
 	if err != nil {
@@ -210,9 +213,9 @@ func upload_handler(w http.ResponseWriter, req *http.Request) {
 		Key    string `json:"key"`
 	}
 	type upload_reply struct {
-		Bucket  string    `json:"bucket"`
-		Primary ent_reply `json:"primary"`
-		Reply  *interface{} `json:"reply"`
+		Bucket  string       `json:"bucket"`
+		Primary ent_reply    `json:"primary"`
+		Reply   *interface{} `json:"reply"`
 	}
 
 	reply := upload_reply{
@@ -233,7 +236,8 @@ func upload_handler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	http.Error(w, string(reply_json), http.StatusOK)
+	w.WriteHeader(http.StatusOK)
+	w.Write(reply_json)
 }
 
 func ping_handler(w http.ResponseWriter, r *http.Request) {
@@ -251,10 +255,31 @@ func (str *stringslice) Set(value string) error {
 	return nil
 }
 
+func getTimeoutServer(addr string, handler http.Handler) *http.Server {
+	//keeps people who are slow or are sending keep-alives from eating all our sockets
+	const (
+		HTTP_READ_TO  = DEFAULT_IDLE_TIMEOUT
+		HTTP_WRITE_TO = DEFAULT_IDLE_TIMEOUT
+	)
+
+	return &http.Server{
+		Addr:         addr,
+		Handler:      handler,
+		ReadTimeout:  HTTP_READ_TO,
+		WriteTimeout: HTTP_WRITE_TO,
+	}
+}
+
+func NoProxyAllowed(request *http.Request) (*url.URL, error) {
+	return nil, nil
+}
+
 func main() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
 	var remotes stringslice
 	flag.Var(&remotes, "remote", "connect to the RIFT proxy on given address in the following format: address:port")
-	listen := flag.String("listen", ":9090", "listen and serve address")
+	listen := flag.String("listen", "0.0.0.0:9090", "listen and serve address")
 	buckets := flag.String("buckets", "", "buckets file (file format: new-line separated list of bucket names)")
 	acl := flag.String("acl", "", "ACL file in the same JSON format as RIFT buckets")
 	flag.Parse()
@@ -274,7 +299,17 @@ func main() {
 
 	rand.Seed(9)
 
-	proxy.client = &http.Client{}
+	proxy.client = &http.Client{
+		Transport: &http.Transport{
+			Proxy: NoProxyAllowed,
+			MaxIdleConnsPerHost: 1024,
+			DisableKeepAlives: false,
+			DisableCompression: false,
+			Dial: func(network, addr string) (net.Conn, error) {
+				return NewTimeoutConnDial(network, addr, DEFAULT_IDLE_TIMEOUT)
+			},
+		},
+	}
 	proxy.host = remotes[0]
 	proxy.acl = nil
 
@@ -286,11 +321,7 @@ func main() {
 		}
 	}
 
-	http.HandleFunc(upload_prefix, upload_handler)
-	http.HandleFunc(ping_prefix, ping_handler)
+	server := getTimeoutServer(*listen, http.HandlerFunc(upload_handler))
 
-	err = http.ListenAndServe(*listen, nil)
-	if err != nil {
-		log.Fatal("ListenAndServe: ", err)
-	}
+	log.Fatal(server.ListenAndServe())
 }
