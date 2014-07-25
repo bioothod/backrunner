@@ -263,17 +263,13 @@ func main() {
 		log.Fatal("no remote nodes specified")
 	}
 
-	for _, r := range remotes {
-		fmt.Printf("remote: %s\n", r)
-	}
-
 	if *buckets == "" {
-		log.Fatal("there is no bucket file")
+		log.Fatal("there is no buckets file")
 	}
 
 	err := BucketsInit(*buckets)
 	if err != nil {
-		log.Fatal("Buckets file '"+*buckets+"'", err)
+		log.Fatal("Could not process buckets file '"+*buckets+"'", err)
 	}
 
 	rand.Seed(9)
