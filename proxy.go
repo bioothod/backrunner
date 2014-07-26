@@ -155,12 +155,14 @@ func upload_handler(w http.ResponseWriter, req *http.Request) {
 
 	req.URL, err = url.Parse(proxy.generate_url(key, bucket, "upload"))
 	if err != nil {
+		log.Printf("url: %s: could not parse generated URL: %q", req.URL, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	sign, err := proxy.generate_signature(user, req)
 	if err != nil {
+		log.Printf("url: %s: could not generate signature: user: %s: %q", req.URL, user, err)
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
@@ -184,6 +186,7 @@ func upload_handler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		log.Printf("url: %s: backend proxy returned error: %d", req.URL, resp.StatusCode)
 		err = NewKeyError(req.URL.String(), resp.StatusCode, rift_reply)
 		http.Error(w, err.Error(), resp.StatusCode)
 		return
@@ -301,10 +304,10 @@ func main() {
 
 	proxy.client = &http.Client{
 		Transport: &http.Transport{
-			Proxy: NoProxyAllowed,
+			Proxy:               NoProxyAllowed,
 			MaxIdleConnsPerHost: 1024,
-			DisableKeepAlives: false,
-			DisableCompression: false,
+			DisableKeepAlives:   false,
+			DisableCompression:  false,
 			Dial: func(network, addr string) (net.Conn, error) {
 				return NewTimeoutConnDial(network, addr, DEFAULT_IDLE_TIMEOUT)
 			},
