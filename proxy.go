@@ -247,6 +247,18 @@ func ping_handler(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "Ping OK", http.StatusOK)
 }
 
+func generic_handler(w http.ResponseWriter, req *http.Request) {
+	if (strings.HasPrefix(req.URL.Path, ping_prefix)) {
+		ping_handler(w, req)
+		return
+	}
+
+	if (strings.HasPrefix(req.URL.Path, upload_prefix)) {
+		upload_handler(w, req)
+		return
+	}
+}
+
 type stringslice []string
 
 func (str *stringslice) String() string {
@@ -324,7 +336,7 @@ func main() {
 		}
 	}
 
-	server := getTimeoutServer(*listen, http.HandlerFunc(upload_handler))
+	server := getTimeoutServer(*listen, http.HandlerFunc(generic_handler))
 
 	log.Fatal(server.ListenAndServe())
 }
