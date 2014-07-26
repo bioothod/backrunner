@@ -148,4 +148,3 @@ func (meta *BucketMeta) ExtractMsgpack(out []interface{}) (err error) {
 
 	return nil
 }
-
