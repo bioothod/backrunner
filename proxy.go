@@ -183,6 +183,7 @@ func upload_handler(w http.ResponseWriter, req *http.Request) {
 	resp, err := proxy.client.Do(req)
 	if err != nil {
 		log.Printf("url: %s: post failed: %q", req.URL, err)
+		bucket.HalfRate()
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
@@ -191,12 +192,14 @@ func upload_handler(w http.ResponseWriter, req *http.Request) {
 	rift_reply, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("url: %s: readall response failed: %q", req.URL, err)
+		bucket.HalfRate()
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("url: %s: backend proxy returned error: %d", req.URL, resp.StatusCode)
+		bucket.HalfRate()
 		err = NewKeyError(req.URL.String(), resp.StatusCode, rift_reply)
 		http.Error(w, err.Error(), resp.StatusCode)
 		return

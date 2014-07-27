@@ -121,6 +121,14 @@ func (bucket *Bucket) SetRate(rate float64) {
 	atomic.AddInt64(&bucket.Packets, 1)
 }
 
+func (bucket *Bucket) HalfRate() {
+	t := time.Now()
+	diff := t.Sub(bucket.Time).Seconds()
+	bucket.Rate = MovingExpAvg(bucket.Rate/2.0, bucket.Rate, float64(diff), 1.0)
+
+	bucket.Time = t
+}
+
 func NewBucketCtl(bucket_path, acl_path string) (bctl BucketCtl, err error) {
 	bctl = BucketCtl{
 		bucket: make([]Bucket, 0, 10),
