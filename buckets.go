@@ -1,10 +1,13 @@
 package main
 
 import (
+	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/big"
 	"os"
 	"strings"
 )
@@ -30,7 +33,7 @@ func NewBucket(name string) Bucket {
 	fmt.Printf("bucket: %s\n", name)
 	return Bucket {
 		Name: name,
-		Rate: 0.0,
+		Rate: 100 * 1024 * 1024 * 1024,
 	}
 }
 
@@ -43,7 +46,7 @@ var (
 	BucketNamespace string   = "bucket"
 )
 
-func (bucket *BucketCtl) open_acl(path string) (err error) {
+func (bctl *BucketCtl) open_acl(path string) (err error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return
@@ -62,7 +65,7 @@ func (bucket *BucketCtl) open_acl(path string) (err error) {
 		return
 	}
 
-	bucket.acl = make(map[string]BucketACL)
+	bctl.acl = make(map[string]BucketACL)
 	for _, a := range jacl {
 		var e BucketACL
 
@@ -71,14 +74,59 @@ func (bucket *BucketCtl) open_acl(path string) (err error) {
 		e.flags = a.Flags
 		e.version = 1
 
-		bucket.acl[e.user] = e
+		bctl.acl[e.user] = e
 	}
 
 	return
 }
 
-func NewBucketCtl(bucket_path, acl_path string) (bucket BucketCtl, err error) {
-	bucket = BucketCtl{
+func IntRange(min, max int64) (int64, error) {
+    var result int64
+    switch {
+    case min > max:
+        // Fail with error
+        return result, errors.New("Min cannot be greater than max.")
+    case max == min:
+        result = max
+    case max > min:
+        maxRand := max - min
+        b, err := rand.Int(rand.Reader, big.NewInt(maxRand))
+        if err != nil {
+            return result, err
+        }
+        result = min + b.Int64()
+    }
+    return result, nil
+}
+
+func (bctl *BucketCtl) GetBucket() (bucket *Bucket) {
+	sum := 0.0
+	for _, b := range bctl.bucket {
+		sum += b.Rate
+	}
+	r, err := IntRange(0, int64(sum))
+	if err != nil {
+		return &bctl.bucket[0]
+	}
+	for i, _ := range bctl.bucket {
+		b := &bctl.bucket[i]
+
+		r -= int64(b.Rate)
+		if r < 0 {
+			return b
+		}
+	}
+
+	// error, should neven reach this point
+	return &bctl.bucket[0]
+}
+
+func (bucket *Bucket) SetRate(rate float64) {
+	bucket.Rate = rate
+}
+
+func NewBucketCtl(bucket_path, acl_path string) (bctl BucketCtl, err error) {
+	bctl = BucketCtl {
 		bucket: make([]Bucket, 0, 10),
 		acl: make(map[string]BucketACL),
 	}
@@ -90,20 +138,20 @@ func NewBucketCtl(bucket_path, acl_path string) (bucket BucketCtl, err error) {
 
 	for _, name := range strings.Split(string(data), "\n") {
 		if len(name) > 0 {
-			bucket.bucket = append(bucket.bucket, NewBucket(name))
+			bctl.bucket = append(bctl.bucket, NewBucket(name))
 		}
 	}
 
-	if len(bucket.bucket) == 0 {
+	if len(bctl.bucket) == 0 {
 		log.Fatal("No buckets found in bucket file")
 	}
 
-	err = bucket.open_acl(acl_path)
+	err = bctl.open_acl(acl_path)
 	if err != nil {
 		log.Fatal("Failed to process ACL file", err)
 	}
 
-	return bucket, nil
+	return bctl, nil
 }
 
 type ExtractError struct {

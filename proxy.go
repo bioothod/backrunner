@@ -150,10 +150,10 @@ func upload_handler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	bucket := proxy.bctl.bucket[rand.Intn(len(proxy.bctl.bucket))].Name
+	bucket := proxy.bctl.GetBucket()
 	key := req.URL.Path[len(upload_prefix):]
 
-	req.URL, err = url.Parse(proxy.generate_url(key, bucket, "upload"))
+	req.URL, err = url.Parse(proxy.generate_url(key, bucket.Name, "upload"))
 	if err != nil {
 		log.Printf("url: %s: could not parse generated URL: %q", req.URL, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -203,6 +203,7 @@ func upload_handler(w http.ResponseWriter, req *http.Request) {
 	m := rift_json.(map[string]interface{})
 	rate := m["rate"]
 	if rate != nil {
+		bucket.SetRate(rate.(float64))
 	}
 
 	query := ""
@@ -227,13 +228,13 @@ func upload_handler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	reply := upload_reply{
-		Bucket: bucket,
+		Bucket: bucket.Name,
 		Reply:  &rift_json,
 		Primary: ent_reply{
 			Key:    key,
-			Get:    "GET " + proxy.generate_url(key, bucket, "get"),
+			Get:    "GET " + proxy.generate_url(key, bucket.Name, "get"),
 			Update: "POST " + req.URL.String() + query,
-			Delete: "POST " + proxy.generate_url(key, bucket, "delete"),
+			Delete: "POST " + proxy.generate_url(key, bucket.Name, "delete"),
 		},
 	}
 
