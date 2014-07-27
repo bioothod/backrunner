@@ -262,6 +262,8 @@ func ping_handler(w http.ResponseWriter, r *http.Request) {
 	j, err := json.Marshal(buckets)
 	if err == nil {
 		message = string(j)
+	} else {
+		message = fmt.Sprintf("marshaling error: %v", err)
 	}
 	http.Error(w, message, http.StatusOK)
 }
