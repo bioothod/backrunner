@@ -1,14 +1,12 @@
 package main
 
 import (
-	"crypto/rand"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"math"
-	"math/big"
+	"math/rand"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -87,34 +85,14 @@ func (bctl *BucketCtl) open_acl(path string) (err error) {
 	return
 }
 
-func IntRange(min, max int64) (int64, error) {
-	var result int64
-	switch {
-	case min > max:
-		// Fail with error
-		return result, errors.New("Min cannot be greater than max.")
-	case max == min:
-		result = max
-	case max > min:
-		maxRand := max - min
-		b, err := rand.Int(rand.Reader, big.NewInt(maxRand))
-		if err != nil {
-			return result, err
-		}
-		result = min + b.Int64()
-	}
-	return result, nil
-}
-
 func (bctl *BucketCtl) GetBucket() (bucket *Bucket) {
 	sum := 0.0
-	for _, b := range bctl.bucket {
+	for i := range bctl.bucket {
+		b := &bctl.bucket[i]
 		sum += b.Rate
 	}
-	r, err := IntRange(0, int64(sum))
-	if err != nil {
-		return &bctl.bucket[0]
-	}
+
+	r := rand.Int63n(int64(sum))
 	for i, _ := range bctl.bucket {
 		b := &bctl.bucket[i]
 
@@ -125,7 +103,7 @@ func (bctl *BucketCtl) GetBucket() (bucket *Bucket) {
 	}
 
 	// error, should neven reach this point
-	return &bctl.bucket[0]
+	return &bctl.bucket[rand.Intn(len(bctl.bucket))]
 }
 
 func MovingExpAvg(value, oldValue, fdtime, ftime float64) float64 {
