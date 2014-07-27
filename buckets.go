@@ -17,40 +17,40 @@ import (
 
 type BucketACL struct {
 	version int32
-	user string
-	token string
-	flags uint64
+	user    string
+	token   string
+	flags   uint64
 }
 type acl_json struct {
-	User string `json:"user"`
+	User  string `json:"user"`
 	Token string `json:"token"`
 	Flags uint64 `json:"flags"`
 }
 
 type Bucket struct {
-	Name	string
-	Rate	float64
-	Packets	int64
-	Time	time.Time
+	Name    string
+	Rate    float64
+	Packets int64
+	Time    time.Time
 }
 
 func NewBucket(name string) Bucket {
 	fmt.Printf("bucket: %s\n", name)
-	return Bucket {
-		Name: name,
-		Rate: 100 * 1024 * 1024 * 1024,
+	return Bucket{
+		Name:    name,
+		Rate:    100 * 1024 * 1024 * 1024,
 		Packets: 0,
-		Time: time.Now(),
+		Time:    time.Now(),
 	}
 }
 
 type BucketCtl struct {
-	bucket		[]Bucket
-	acl		map[string]BucketACL
+	bucket []Bucket
+	acl    map[string]BucketACL
 }
 
 var (
-	BucketNamespace string   = "bucket"
+	BucketNamespace string = "bucket"
 )
 
 func (bctl *BucketCtl) open_acl(path string) (err error) {
@@ -88,22 +88,22 @@ func (bctl *BucketCtl) open_acl(path string) (err error) {
 }
 
 func IntRange(min, max int64) (int64, error) {
-    var result int64
-    switch {
-    case min > max:
-        // Fail with error
-        return result, errors.New("Min cannot be greater than max.")
-    case max == min:
-        result = max
-    case max > min:
-        maxRand := max - min
-        b, err := rand.Int(rand.Reader, big.NewInt(maxRand))
-        if err != nil {
-            return result, err
-        }
-        result = min + b.Int64()
-    }
-    return result, nil
+	var result int64
+	switch {
+	case min > max:
+		// Fail with error
+		return result, errors.New("Min cannot be greater than max.")
+	case max == min:
+		result = max
+	case max > min:
+		maxRand := max - min
+		b, err := rand.Int(rand.Reader, big.NewInt(maxRand))
+		if err != nil {
+			return result, err
+		}
+		result = min + b.Int64()
+	}
+	return result, nil
 }
 
 func (bctl *BucketCtl) GetBucket() (bucket *Bucket) {
@@ -130,7 +130,7 @@ func (bctl *BucketCtl) GetBucket() (bucket *Bucket) {
 
 func MovingExpAvg(value, oldValue, fdtime, ftime float64) float64 {
 	alpha := 1.0 - math.Exp(-fdtime/ftime)
-	r := alpha * value + (1.0 - alpha) * oldValue
+	r := alpha*value + (1.0-alpha)*oldValue
 	return r
 }
 
@@ -144,9 +144,9 @@ func (bucket *Bucket) SetRate(rate float64) {
 }
 
 func NewBucketCtl(bucket_path, acl_path string) (bctl BucketCtl, err error) {
-	bctl = BucketCtl {
+	bctl = BucketCtl{
 		bucket: make([]Bucket, 0, 10),
-		acl: make(map[string]BucketACL),
+		acl:    make(map[string]BucketACL),
 	}
 
 	data, err := ioutil.ReadFile(bucket_path)
@@ -174,7 +174,7 @@ func NewBucketCtl(bucket_path, acl_path string) (bctl BucketCtl, err error) {
 
 type ExtractError struct {
 	reason string
-	out []interface{}
+	out    []interface{}
 }
 
 func (err *ExtractError) Error() string {
@@ -182,28 +182,28 @@ func (err *ExtractError) Error() string {
 }
 
 type BucketMsgpack struct {
-	version int32
-	bucket string
-	acl map[string]BucketACL
-	groups []int32
-	flags uint64
-	max_size uint64
+	version     int32
+	bucket      string
+	acl         map[string]BucketACL
+	groups      []int32
+	flags       uint64
+	max_size    uint64
 	max_key_num uint64
-	reserved [3]uint64
+	reserved    [3]uint64
 }
 
 func (meta *BucketMsgpack) ExtractMsgpack(out []interface{}) (err error) {
 	if len(out) < 8 {
 		return &ExtractError{
 			reason: fmt.Sprintf("array length: %d, must be at least 8", len(out)),
-			out: out,
+			out:    out,
 		}
 	}
 	meta.version = int32(out[0].(int64))
 	if meta.version != 1 {
 		return &ExtractError{
 			reason: fmt.Sprintf("unsupported metadata version %d", meta.version),
-			out: out,
+			out:    out,
 		}
 	}
 	meta.bucket = out[1].(string)

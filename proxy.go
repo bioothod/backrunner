@@ -35,7 +35,8 @@ type KeyError struct {
 }
 
 func (k *KeyError) Error() string {
-	return fmt.Sprintf("url: %s: error code: %d, returned data: '%s'", k.url, k.status, fmt.Sprintf("%s", k.data))
+	return fmt.Sprintf("url: %s: error code: %d, returned data: '%s'",
+		k.url, k.status, fmt.Sprintf("%s", k.data))
 }
 
 func NewKeyError(url string, status int, data []byte) (err error) {
@@ -49,9 +50,9 @@ func NewKeyError(url string, status int, data []byte) (err error) {
 }
 
 type bproxy struct {
-	host	string
-	client	*http.Client
-	bctl	BucketCtl
+	host   string
+	client *http.Client
+	bctl   BucketCtl
 }
 
 type request struct {
@@ -85,13 +86,17 @@ func (p *bproxy) generate_url(key, bucket, operation string) string {
 func (p *bproxy) generate_signature(user string, r *http.Request) (sign string, err error) {
 	acl, ok := p.bctl.acl[user]
 	if !ok {
-		err = NewKeyError(r.URL.String(), http.StatusForbidden, []byte(fmt.Sprintf("url: %s: there is no user '%s' in ACL\n", r.URL, user)))
+		err = NewKeyError(r.URL.String(), http.StatusForbidden,
+			[]byte(fmt.Sprintf("url: %s: there is no user '%s' in ACL\n",
+				r.URL, user)))
 		return
 	}
 
 	sign, err = GenerateSignature(acl.token, r.Method, r.URL, r.Header)
 	if err != nil {
-		err = NewKeyError(r.URL.String(), http.StatusForbidden, []byte(fmt.Sprintf("url: %s: hmac generation failed: %s\n", r.URL, err)))
+		err = NewKeyError(r.URL.String(), http.StatusForbidden,
+			[]byte(fmt.Sprintf("url: %s: hmac generation failed: %s\n",
+				r.URL, err)))
 		return
 	}
 
@@ -107,21 +112,25 @@ func (p *bproxy) auth_check(r *http.Request) (user string, err error) {
 
 	auth_headers, ok := r.Header[auth_header_str]
 	if !ok {
-		err = NewKeyError(r.URL.String(), http.StatusForbidden, []byte(fmt.Sprintf("url: %s: there is no '%s' header\n", r.URL, auth_header_str)))
+		err = NewKeyError(r.URL.String(), http.StatusForbidden,
+			[]byte(fmt.Sprintf("url: %s: there is no '%s' header\n",
+				r.URL, auth_header_str)))
 		return
 	}
 
 	auth_data := strings.Split(auth_headers[0], " ")
 	if len(auth_data) != 2 {
-		err = NewKeyError(r.URL.String(), http.StatusForbidden, []byte(fmt.Sprintf("url: %s: auth header1 '%s' must be 'riftv1 user:hmac'\n",
-			r.URL, auth_headers[0])))
+		err = NewKeyError(r.URL.String(), http.StatusForbidden,
+			[]byte(fmt.Sprintf("url: %s: auth header1 '%s' must be 'riftv1 user:hmac'\n",
+				r.URL, auth_headers[0])))
 		return
 	}
 
 	auth_data = strings.Split(auth_data[1], ":")
 	if len(auth_data) != 2 {
-		err = NewKeyError(r.URL.String(), http.StatusForbidden, []byte(fmt.Sprintf("url: %s: auth header2 '%s' must be 'riftv1 user:hmac'\n",
-			r.URL, auth_headers[0])))
+		err = NewKeyError(r.URL.String(), http.StatusForbidden,
+			[]byte(fmt.Sprintf("url: %s: auth header2 '%s' must be 'riftv1 user:hmac'\n",
+				r.URL, auth_headers[0])))
 		return
 	}
 
@@ -135,7 +144,8 @@ func (p *bproxy) auth_check(r *http.Request) (user string, err error) {
 
 	if recv_auth != calc_auth {
 		err = NewKeyError(r.URL.String(), http.StatusForbidden,
-			[]byte(fmt.Sprintf("url: %s: hmac mismatch: recv: '%s', calc: '%s'\n", r.URL, recv_auth, calc_auth)))
+			[]byte(fmt.Sprintf("url: %s: hmac mismatch: recv: '%s', calc: '%s'\n",
+				r.URL, recv_auth, calc_auth)))
 		return
 	}
 
@@ -197,7 +207,8 @@ func upload_handler(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		rift_json = nil
 
-		log.Printf("url: %s: upload: can not unmarshall rift reply: '%s', error: %q\n", req.URL, rift_reply, err)
+		log.Printf("url: %s: upload: can not unmarshall rift reply: '%s', error: %q\n",
+			req.URL, rift_reply, err)
 	}
 
 	m := rift_json.(map[string]interface{})
@@ -269,12 +280,12 @@ func ping_handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func generic_handler(w http.ResponseWriter, req *http.Request) {
-	if (strings.HasPrefix(req.URL.Path, ping_prefix)) {
+	if strings.HasPrefix(req.URL.Path, ping_prefix) {
 		ping_handler(w, req)
 		return
 	}
 
-	if (strings.HasPrefix(req.URL.Path, upload_prefix)) {
+	if strings.HasPrefix(req.URL.Path, upload_prefix) {
 		upload_handler(w, req)
 		return
 	}
