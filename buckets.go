@@ -11,6 +11,7 @@ import (
 	"math/big"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -136,9 +137,14 @@ func MovingExpAvg(value, oldValue, fdtime, ftime float64) float64 {
 func (bucket *Bucket) SetRate(rate float64) {
 	t := time.Now()
 	diff := t.Sub(bucket.Time)
-	bucket.Rate = MovingExpAvg(rate, bucket.Rate, float64(diff), 1.0)
+	if rate < bucket.Rate {
+		bucket.Rate = rate
+	} else {
+		bucket.Rate = MovingExpAvg(rate, bucket.Rate, float64(diff), 1.0)
+	}
+
 	bucket.Time = t
-	bucket.Packets += 1
+	atomic.AddInt64(&bucket.Packets, 1)
 }
 
 func NewBucketCtl(bucket_path, acl_path string) (bctl BucketCtl, err error) {
