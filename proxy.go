@@ -250,7 +250,20 @@ func upload_handler(w http.ResponseWriter, req *http.Request) {
 }
 
 func ping_handler(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "Ping OK", http.StatusOK)
+	message := "Ping OK"
+
+	buckets := make([]interface{}, 0)
+
+	for i := range proxy.bctl.bucket {
+		b := &proxy.bctl.bucket[i]
+		buckets = append(buckets, b)
+	}
+
+	j, err := json.Marshal(buckets)
+	if err == nil {
+		message = string(j)
+	}
+	http.Error(w, message, http.StatusOK)
 }
 
 func generic_handler(w http.ResponseWriter, req *http.Request) {
