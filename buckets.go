@@ -4,31 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"strings"
 )
-
-var (
-	BucketNamespace string   = "bucket"
-	Buckets         []string
-)
-
-func BucketsInit(path string) (err error) {
-	data, err := ioutil.ReadFile(path)
-	if err != nil {
-		return
-	}
-
-	Buckets = make([]string, 0, 10)
-	for _, str := range strings.Split(string(data), "\n") {
-		if len(str) > 0 {
-			Buckets = append(Buckets, str)
-			fmt.Printf("bucket: %s\n", str)
-		}
-	}
-
-	return nil
-}
 
 type BucketACL struct {
 	version int32
@@ -42,7 +21,29 @@ type acl_json struct {
 	Flags uint64 `json:"flags"`
 }
 
-func BucketACL_Extract_JSON_File(path string) (acl map[string]BucketACL, err error) {
+type Bucket struct {
+	Name	string
+	Rate	float64
+}
+
+func NewBucket(name string) Bucket {
+	fmt.Printf("bucket: %s\n", name)
+	return Bucket {
+		Name: name,
+		Rate: 0.0,
+	}
+}
+
+type BucketCtl struct {
+	bucket		[]Bucket
+	acl		map[string]BucketACL
+}
+
+var (
+	BucketNamespace string   = "bucket"
+)
+
+func (bucket *BucketCtl) open_acl(path string) (err error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return
@@ -61,7 +62,7 @@ func BucketACL_Extract_JSON_File(path string) (acl map[string]BucketACL, err err
 		return
 	}
 
-	acl = make(map[string]BucketACL)
+	bucket.acl = make(map[string]BucketACL)
 	for _, a := range jacl {
 		var e BucketACL
 
@@ -70,21 +71,39 @@ func BucketACL_Extract_JSON_File(path string) (acl map[string]BucketACL, err err
 		e.flags = a.Flags
 		e.version = 1
 
-		acl[e.user] = e
+		bucket.acl[e.user] = e
 	}
 
 	return
 }
 
-type BucketMeta struct {
-	version int32
-	bucket string
-	acl map[string]BucketACL
-	groups []int32
-	flags uint64
-	max_size uint64
-	max_key_num uint64
-	reserved [3]uint64
+func NewBucketCtl(bucket_path, acl_path string) (bucket BucketCtl, err error) {
+	bucket = BucketCtl{
+		bucket: make([]Bucket, 0, 10),
+		acl: make(map[string]BucketACL),
+	}
+
+	data, err := ioutil.ReadFile(bucket_path)
+	if err != nil {
+		return
+	}
+
+	for _, name := range strings.Split(string(data), "\n") {
+		if len(name) > 0 {
+			bucket.bucket = append(bucket.bucket, NewBucket(name))
+		}
+	}
+
+	if len(bucket.bucket) == 0 {
+		log.Fatal("No buckets found in bucket file")
+	}
+
+	err = bucket.open_acl(acl_path)
+	if err != nil {
+		log.Fatal("Failed to process ACL file", err)
+	}
+
+	return bucket, nil
 }
 
 type ExtractError struct {
@@ -96,7 +115,18 @@ func (err *ExtractError) Error() string {
 	return fmt.Sprintf("%s: %v", err.reason, err.out)
 }
 
-func (meta *BucketMeta) ExtractMsgpack(out []interface{}) (err error) {
+type BucketMsgpack struct {
+	version int32
+	bucket string
+	acl map[string]BucketACL
+	groups []int32
+	flags uint64
+	max_size uint64
+	max_key_num uint64
+	reserved [3]uint64
+}
+
+func (meta *BucketMsgpack) ExtractMsgpack(out []interface{}) (err error) {
 	if len(out) < 8 {
 		return &ExtractError{
 			reason: fmt.Sprintf("array length: %d, must be at least 8", len(out)),

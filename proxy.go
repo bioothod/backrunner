@@ -49,9 +49,9 @@ func NewKeyError(url string, status int, data []byte) (err error) {
 }
 
 type bproxy struct {
-	host   string
-	client *http.Client
-	acl    map[string]BucketACL
+	host	string
+	client	*http.Client
+	bctl	BucketCtl
 }
 
 type request struct {
@@ -83,7 +83,7 @@ func (p *bproxy) generate_url(key, bucket, operation string) string {
 }
 
 func (p *bproxy) generate_signature(user string, r *http.Request) (sign string, err error) {
-	acl, ok := p.acl[user]
+	acl, ok := p.bctl.acl[user]
 	if !ok {
 		err = NewKeyError(r.URL.String(), http.StatusForbidden, []byte(fmt.Sprintf("url: %s: there is no user '%s' in ACL\n", r.URL, user)))
 		return
@@ -101,7 +101,7 @@ func (p *bproxy) generate_signature(user string, r *http.Request) (sign string, 
 func (p *bproxy) auth_check(r *http.Request) (user string, err error) {
 	user = ""
 	err = nil
-	if p.acl == nil {
+	if len(p.bctl.acl) == 0 {
 		return
 	}
 
@@ -150,7 +150,7 @@ func upload_handler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	bucket := Buckets[rand.Intn(len(Buckets))]
+	bucket := proxy.bctl.bucket[rand.Intn(len(proxy.bctl.bucket))].Name
 	key := req.URL.Path[len(upload_prefix):]
 
 	req.URL, err = url.Parse(proxy.generate_url(key, bucket, "upload"))
@@ -198,6 +198,11 @@ func upload_handler(w http.ResponseWriter, req *http.Request) {
 		rift_json = nil
 
 		log.Printf("url: %s: upload: can not unmarshall rift reply: '%s', error: %q\n", req.URL, rift_reply, err)
+	}
+
+	m := rift_json.(map[string]interface{})
+	rate := m["rate"]
+	if rate != nil {
 	}
 
 	query := ""
@@ -307,12 +312,13 @@ func main() {
 		log.Fatal("there is no buckets file")
 	}
 
-	err := BucketsInit(*buckets)
+	rand.Seed(9)
+
+	var err error
+	proxy.bctl, err = NewBucketCtl(*buckets, *acl)
 	if err != nil {
 		log.Fatal("Could not process buckets file '"+*buckets+"'", err)
 	}
-
-	rand.Seed(9)
 
 	proxy.client = &http.Client{
 		Transport: &http.Transport{
@@ -326,15 +332,6 @@ func main() {
 		},
 	}
 	proxy.host = remotes[0]
-	proxy.acl = nil
-
-	if *acl != "" {
-		var err error
-		proxy.acl, err = BucketACL_Extract_JSON_File(*acl)
-		if err != nil {
-			log.Fatal("ACL: ", err)
-		}
-	}
 
 	server := getTimeoutServer(*listen, http.HandlerFunc(generic_handler))
 
