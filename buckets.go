@@ -136,7 +136,7 @@ func MovingExpAvg(value, oldValue, fdtime, ftime float64) float64 {
 
 func (bucket *Bucket) SetRate(rate float64) {
 	t := time.Now()
-	diff := t.Sub(bucket.Time)
+	diff := t.Sub(bucket.Time).Seconds()
 	bucket.Rate = MovingExpAvg(rate, bucket.Rate, float64(diff), 1.0)
 
 	bucket.Time = t
