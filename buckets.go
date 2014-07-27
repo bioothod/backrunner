@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math"
 	"math/big"
 	"os"
 	"strings"
+	"time"
 )
 
 type BucketACL struct {
@@ -27,6 +29,8 @@ type acl_json struct {
 type Bucket struct {
 	Name	string
 	Rate	float64
+	Packets	int64
+	Time	time.Time
 }
 
 func NewBucket(name string) Bucket {
@@ -34,6 +38,8 @@ func NewBucket(name string) Bucket {
 	return Bucket {
 		Name: name,
 		Rate: 100 * 1024 * 1024 * 1024,
+		Packets: 0,
+		Time: time.Now(),
 	}
 }
 
@@ -121,8 +127,18 @@ func (bctl *BucketCtl) GetBucket() (bucket *Bucket) {
 	return &bctl.bucket[0]
 }
 
+func MovingExpAvg(value, oldValue, fdtime, ftime float64) float64 {
+	alpha := 1.0 - math.Exp(-fdtime/ftime)
+	r := alpha * value + (1.0 - alpha) * oldValue
+	return r
+}
+
 func (bucket *Bucket) SetRate(rate float64) {
-	bucket.Rate = rate
+	t := time.Now()
+	diff := t.Sub(bucket.Time)
+	bucket.Rate = MovingExpAvg(rate, bucket.Rate, float64(diff), 1.0)
+	bucket.Time = t
+	bucket.Packets += 1
 }
 
 func NewBucketCtl(bucket_path, acl_path string) (bctl BucketCtl, err error) {
