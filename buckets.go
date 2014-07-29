@@ -27,24 +27,39 @@ type acl_json struct {
 
 type Bucket struct {
 	Name    string
-	Rate    float64
+	Backend	map[string]Backend
+}
+
+type Backend struct {
+	Id	string // hostname in elliptics 2.25
+	Rate	float64
 	Packets int64
 	Time    time.Time
 }
 
-func NewBucket(name string) Bucket {
+func NewBackend(name string) Backend {
+	return Backend {
+		Id:	name,
+		Rate:	1024 * 1024 * 1024 * 100,
+		Time:	time.Now(),
+		Packet:	0,
+	}
+}
+
+func NewBucket(remote, name string) Bucket {
 	fmt.Printf("bucket: %s\n", name)
 	return Bucket{
 		Name:    name,
-		Rate:    100 * 1024 * 1024 * 1024,
 		Packets: 0,
 		Time:    time.Now(),
+		Backend:	make(map[string]Backend),
 	}
 }
 
 type BucketCtl struct {
-	bucket []Bucket
-	acl    map[string]BucketACL
+	remote	[]string
+	bucket	[]Bucket
+	acl	map[string]BucketACL
 }
 
 var (
@@ -129,8 +144,41 @@ func (bucket *Bucket) HalfRate() {
 	bucket.Time = t
 }
 
-func NewBucketCtl(bucket_path, acl_path string) (bctl BucketCtl, err error) {
+func (bctl *BucketCtl) GetStat() (data string, err error) {
+	remote := bctl.remote[0]
+
+	resp, err := http.Get(remote + "/stat/")
+	if err != nil {
+		log.Printf("Could not grab remote statistics from %s: %v", remote, err)
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	data, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Could not read remote statistics from reply %s: %v", remote, err)
+		return nil, err
+	}
+
+	return data, nil
+}
+
+func (bctl *BucketCtl) ParseStat(data []byte) (err error) {
+	var jdata interface{}
+
+	err = json.Unmarshal(data, &jdata)
+	if err != nil {
+		log.Printf("Could not parse statistics '%q': %v", data, err)
+		return err
+	}
+
+	log.Printf("%q\n", jdata)
+	return nil
+}
+
+func NewBucketCtl(remote []string, bucket_path, acl_path string) (bctl BucketCtl, err error) {
 	bctl = BucketCtl{
+		remote:	remote,
 		bucket: make([]Bucket, 0, 10),
 		acl:    make(map[string]BucketACL),
 	}
@@ -153,6 +201,16 @@ func NewBucketCtl(bucket_path, acl_path string) (bctl BucketCtl, err error) {
 	err = bctl.open_acl(acl_path)
 	if err != nil {
 		log.Fatal("Failed to process ACL file", err)
+	}
+
+	data, err := bctl.GetStat()
+	if err != nil {
+		log.Fatal("Could not grab initial stats: %v", err)
+	}
+
+	err = bctl.ParseStats(data)
+	if err != nil {
+		log.Fatal("Could not parse initial stats: %v", err)
 	}
 
 	return bctl, nil
