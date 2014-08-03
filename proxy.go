@@ -1,232 +1,65 @@
 package main
 
 import (
-	//"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
-	"io/ioutil"
+	"github.com/bioothod/backrunner/bucket"
+	"github.com/bioothod/backrunner/errors"
+	"github.com/bioothod/backrunner/rift"
+	"github.com/bioothod/backrunner/transport"
 	"log"
 	"math/rand"
-	"net"
 	"net/http"
-	"net/url"
 	"runtime"
 	"strings"
-	"time"
 )
-
-const DEFAULT_IDLE_TIMEOUT = 5 * time.Second
 
 var (
 	proxy bproxy
 
 	upload_prefix string = "/upload/"
 	ping_prefix   string = "/ping/"
-
-	auth_header_str string = "Authorization"
 )
 
-type KeyError struct {
-	url    string
-	status int
-	data   []byte
-}
-
-func (k *KeyError) Error() string {
-	return fmt.Sprintf("url: %s: error code: %d, returned data: '%s'",
-		k.url, k.status, fmt.Sprintf("%s", k.data))
-}
-
-func NewKeyError(url string, status int, data []byte) (err error) {
-	err = &KeyError{
-		url:    url,
-		status: status,
-		data:   data,
-	}
-	log.Printf("%s", err)
-	return
-}
-
 type bproxy struct {
-	host   string
-	client *http.Client
-	bctl   BucketCtl
+	host		string
+	bctl		bucket.BucketCtl
+	transport	transport.Transport
 }
 
-type request struct {
-	proxy *bproxy
-	url   string
-	user  string
-	query url.Values
-	data  io.Reader
-
-	reply  []byte
-	status int
-}
-
-func (p *bproxy) proxy_request(req *http.Request) (new_req request) {
-	new_req = request{
-		proxy:  p,
-		url:    "",
-		query:  req.URL.Query(),
-		data:   nil,
-		reply:  nil,
-		status: http.StatusBadRequest,
-	}
-
-	return
-}
-
-func (p *bproxy) generate_url(key, bucket, operation string) string {
+func (p *bproxy) local_url(key, bucket, operation string) string {
 	return fmt.Sprintf("http://%s/%s/%s/%s", p.host, operation, bucket, key)
 }
 
-func (p *bproxy) generate_signature(user string, r *http.Request) (sign string, err error) {
-	acl, ok := p.bctl.acl[user]
-	if !ok {
-		err = NewKeyError(r.URL.String(), http.StatusForbidden,
-			[]byte(fmt.Sprintf("url: %s: there is no user '%s' in ACL\n",
-				r.URL, user)))
-		return
-	}
+func upload_handler(w http.ResponseWriter, http_req *http.Request) {
+	var req transport.Request
+	req.Http = http_req
+	req.Key = http_req.URL.Path[len(upload_prefix):]
+	req.Bctl = &proxy.bctl
+	req.Bucket = proxy.bctl.GetBucket()
 
-	sign, err = GenerateSignature(acl.token, r.Method, r.URL, r.Header)
+	var err error
+	req.User, err = req.Bctl.CheckAuth(http_req)
 	if err != nil {
-		err = NewKeyError(r.URL.String(), http.StatusForbidden,
-			[]byte(fmt.Sprintf("url: %s: hmac generation failed: %s\n",
-				r.URL, err)))
-		return
-	}
-
-	return
-}
-
-func (p *bproxy) auth_check(r *http.Request) (user string, err error) {
-	user = ""
-	err = nil
-	if len(p.bctl.acl) == 0 {
-		return
-	}
-
-	auth_headers, ok := r.Header[auth_header_str]
-	if !ok {
-		err = NewKeyError(r.URL.String(), http.StatusForbidden,
-			[]byte(fmt.Sprintf("url: %s: there is no '%s' header\n",
-				r.URL, auth_header_str)))
-		return
-	}
-
-	auth_data := strings.Split(auth_headers[0], " ")
-	if len(auth_data) != 2 {
-		err = NewKeyError(r.URL.String(), http.StatusForbidden,
-			[]byte(fmt.Sprintf("url: %s: auth header1 '%s' must be 'riftv1 user:hmac'\n",
-				r.URL, auth_headers[0])))
-		return
-	}
-
-	auth_data = strings.Split(auth_data[1], ":")
-	if len(auth_data) != 2 {
-		err = NewKeyError(r.URL.String(), http.StatusForbidden,
-			[]byte(fmt.Sprintf("url: %s: auth header2 '%s' must be 'riftv1 user:hmac'\n",
-				r.URL, auth_headers[0])))
-		return
-	}
-
-	user = auth_data[0]
-	recv_auth := auth_data[1]
-
-	calc_auth, err := p.generate_signature(user, r)
-	if err != nil {
-		return
-	}
-
-	if recv_auth != calc_auth {
-		err = NewKeyError(r.URL.String(), http.StatusForbidden,
-			[]byte(fmt.Sprintf("url: %s: hmac mismatch: recv: '%s', calc: '%s'\n",
-				r.URL, recv_auth, calc_auth)))
-		return
-	}
-
-	return user, nil
-}
-
-func upload_handler(w http.ResponseWriter, req *http.Request) {
-	user, err := proxy.auth_check(req)
-	if err != nil {
-		log.Printf("url: %s: upload: auth check failed: %q\n", req.URL, err)
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 
-	bucket := proxy.bctl.GetBucket()
-	key := req.URL.Path[len(upload_prefix):]
+	resp, err := proxy.transport.Upload(&req)
+	if resp.Status != http.StatusOK {
+		log.Printf("url: %s: transport error: %d", http_req.URL, resp.Status)
+		req.Bucket.HalfRate()
 
-	req.URL, err = url.Parse(proxy.generate_url(key, bucket.Name, "upload"))
-	if err != nil {
-		log.Printf("url: %s: could not parse generated URL: %q", req.URL, err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		err = errors.NewKeyError(http_req.URL.String(), resp.Status, string(resp.Data))
+		http.Error(w, err.Error(), resp.Status)
 		return
 	}
 
-	sign, err := proxy.generate_signature(user, req)
-	if err != nil {
-		log.Printf("url: %s: could not generate signature: user: %s: %q", req.URL, user, err)
-		http.Error(w, err.Error(), http.StatusForbidden)
-		return
-	}
-
-	req.Header[auth_header_str] = []string{"riftv1 " + user + ":" + sign}
-
-	req.RequestURI = ""
-	resp, err := proxy.client.Do(req)
-	if err != nil {
-		log.Printf("url: %s: post failed: %q", req.URL, err)
-		bucket.HalfRate()
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-		return
-	}
-	defer resp.Body.Close()
-
-	rift_reply, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("url: %s: readall response failed: %q", req.URL, err)
-		bucket.HalfRate()
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-		return
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		log.Printf("url: %s: backend proxy returned error: %d", req.URL, resp.StatusCode)
-		bucket.HalfRate()
-		err = NewKeyError(req.URL.String(), resp.StatusCode, rift_reply)
-		http.Error(w, err.Error(), resp.StatusCode)
-		return
-	}
-
-	var rift_json interface{}
-	err = json.Unmarshal(rift_reply, &rift_json)
-	if err != nil {
-		rift_json = nil
-
-		log.Printf("url: %s: upload: can not unmarshall rift reply: '%s', error: %q\n",
-			req.URL, rift_reply, err)
-	}
-
-	m := rift_json.(map[string]interface{})
+	m := resp.Json.(map[string]interface{})
 	rate := m["rate"]
 	if rate != nil {
-		bucket.SetRate(rate.(float64))
-	}
-
-	query := ""
-	if len(req.URL.RawQuery) != 0 {
-		query = "?" + req.URL.RawQuery
-	}
-
-	if len(req.URL.Fragment) != 0 {
-		query += "#" + req.URL.Fragment
+		req.Bucket.SetRate(rate.(float64))
 	}
 
 	type ent_reply struct {
@@ -242,19 +75,19 @@ func upload_handler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	reply := upload_reply{
-		Bucket: bucket.Name,
-		Reply:  &rift_json,
+		Bucket: req.Bucket.Name,
+		Reply:  &resp.Json,
 		Primary: ent_reply{
-			Key:    key,
-			Get:    "GET " + proxy.generate_url(key, bucket.Name, "get"),
-			Update: "POST " + req.URL.String() + query,
-			Delete: "POST " + proxy.generate_url(key, bucket.Name, "delete"),
+			Key:    req.Key,
+			Get:    "GET " + proxy.local_url(req.Key, req.Bucket.Name, "get"),
+			Update: "POST " + proxy.local_url(req.Key, req.Bucket.Name, "upload"),
+			Delete: "POST " + proxy.local_url(req.Key, req.Bucket.Name, "delete"),
 		},
 	}
 
 	reply_json, err := json.Marshal(reply)
 	if err != nil {
-		log.Printf("url: %s: upload: json marshal failed: %q\n", req.URL, err)
+		log.Printf("url: %s: upload: json marshal failed: %q\n", http_req.URL, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -268,8 +101,8 @@ func ping_handler(w http.ResponseWriter, r *http.Request) {
 
 	buckets := make([]interface{}, 0)
 
-	for i := range proxy.bctl.bucket {
-		b := &proxy.bctl.bucket[i]
+	for i := range proxy.bctl.Bucket {
+		b := &proxy.bctl.Bucket[i]
 		buckets = append(buckets, b)
 	}
 
@@ -294,22 +127,11 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-type stringslice []string
-
-func (str *stringslice) String() string {
-	return fmt.Sprintf("%d", *str)
-}
-
-func (str *stringslice) Set(value string) error {
-	*str = append(*str, value)
-	return nil
-}
-
 func getTimeoutServer(addr string, handler http.Handler) *http.Server {
 	//keeps people who are slow or are sending keep-alives from eating all our sockets
 	const (
-		HTTP_READ_TO  = DEFAULT_IDLE_TIMEOUT
-		HTTP_WRITE_TO = DEFAULT_IDLE_TIMEOUT
+		HTTP_READ_TO  = transport.DEFAULT_IDLE_TIMEOUT
+		HTTP_WRITE_TO = transport.DEFAULT_IDLE_TIMEOUT
 	)
 
 	return &http.Server{
@@ -320,8 +142,15 @@ func getTimeoutServer(addr string, handler http.Handler) *http.Server {
 	}
 }
 
-func NoProxyAllowed(request *http.Request) (*url.URL, error) {
-	return nil, nil
+type stringslice []string
+
+func (str *stringslice) String() string {
+	return fmt.Sprintf("%d", *str)
+}
+
+func (str *stringslice) Set(value string) error {
+	*str = append(*str, value)
+	return nil
 }
 
 func main() {
@@ -345,23 +174,16 @@ func main() {
 	rand.Seed(9)
 
 	var err error
-	proxy.bctl, err = NewBucketCtl(*buckets, *acl)
+	proxy.bctl, err = bucket.NewBucketCtl(remotes, *buckets, *acl)
 	if err != nil {
 		log.Fatal("Could not process buckets file '"+*buckets+"'", err)
 	}
 
-	proxy.client = &http.Client{
-		Transport: &http.Transport{
-			Proxy:               NoProxyAllowed,
-			MaxIdleConnsPerHost: 1024,
-			DisableKeepAlives:   false,
-			DisableCompression:  false,
-			Dial: func(network, addr string) (net.Conn, error) {
-				return NewTimeoutConnDial(network, addr, DEFAULT_IDLE_TIMEOUT)
-			},
-		},
-	}
 	proxy.host = remotes[0]
+	proxy.transport, err = rift.NewRiftTransport(remotes)
+	if err != nil {
+		log.Fatal("Could not create RIFT transport", err)
+	}
 
 	server := getTimeoutServer(*listen, http.HandlerFunc(generic_handler))
 

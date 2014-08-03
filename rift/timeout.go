@@ -1,4 +1,4 @@
-package main
+package rift
 
 import (
 	"errors"

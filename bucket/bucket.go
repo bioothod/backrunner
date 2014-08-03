@@ -1,12 +1,15 @@
-package main
+package bucket
 
 import (
+	"github.com/bioothod/backrunner/auth"
+	"github.com/bioothod/backrunner/errors"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"math"
 	"math/rand"
+	"net/http"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -26,8 +29,12 @@ type acl_json struct {
 }
 
 type Bucket struct {
-	Name    string
+	Name	string
 	Backend	map[string]Backend
+
+	Rate	float64
+	Packets int64
+	Time    time.Time
 }
 
 type Backend struct {
@@ -39,27 +46,29 @@ type Backend struct {
 
 func NewBackend(name string) Backend {
 	return Backend {
-		Id:	name,
-		Rate:	1024 * 1024 * 1024 * 100,
-		Time:	time.Now(),
-		Packet:	0,
+		Id:		name,
+		Rate:		1024 * 1024 * 1024 * 100,
+		Time:		time.Now(),
+		Packets:	0,
 	}
 }
 
-func NewBucket(remote, name string) Bucket {
+func NewBucket(name string) Bucket {
 	fmt.Printf("bucket: %s\n", name)
 	return Bucket{
-		Name:    name,
-		Packets: 0,
-		Time:    time.Now(),
+		Name:		name,
 		Backend:	make(map[string]Backend),
+
+		Rate:		1024 * 1024 * 1024 * 100,
+		Packets:	0,
+		Time:		time.Now(),
 	}
 }
 
 type BucketCtl struct {
-	remote	[]string
-	bucket	[]Bucket
-	acl	map[string]BucketACL
+	Remote	[]string
+	Bucket	[]Bucket
+	Acl	map[string]BucketACL
 }
 
 var (
@@ -85,7 +94,7 @@ func (bctl *BucketCtl) open_acl(path string) (err error) {
 		return
 	}
 
-	bctl.acl = make(map[string]BucketACL)
+	bctl.Acl = make(map[string]BucketACL)
 	for _, a := range jacl {
 		var e BucketACL
 
@@ -94,7 +103,7 @@ func (bctl *BucketCtl) open_acl(path string) (err error) {
 		e.flags = a.Flags
 		e.version = 1
 
-		bctl.acl[e.user] = e
+		bctl.Acl[e.user] = e
 	}
 
 	return
@@ -102,14 +111,14 @@ func (bctl *BucketCtl) open_acl(path string) (err error) {
 
 func (bctl *BucketCtl) GetBucket() (bucket *Bucket) {
 	sum := 0.0
-	for i := range bctl.bucket {
-		b := &bctl.bucket[i]
+	for i := range bctl.Bucket {
+		b := &bctl.Bucket[i]
 		sum += b.Rate
 	}
 
 	r := rand.Int63n(int64(sum))
-	for i, _ := range bctl.bucket {
-		b := &bctl.bucket[i]
+	for i, _ := range bctl.Bucket {
+		b := &bctl.Bucket[i]
 
 		r -= int64(b.Rate)
 		if r < 0 {
@@ -117,8 +126,8 @@ func (bctl *BucketCtl) GetBucket() (bucket *Bucket) {
 		}
 	}
 
-	// error, should neven reach this point
-	return &bctl.bucket[rand.Intn(len(bctl.bucket))]
+	// error, should never reach this point
+	return &bctl.Bucket[rand.Intn(len(bctl.Bucket))]
 }
 
 func MovingExpAvg(value, oldValue, fdtime, ftime float64) float64 {
@@ -144,20 +153,20 @@ func (bucket *Bucket) HalfRate() {
 	bucket.Time = t
 }
 
-func (bctl *BucketCtl) GetStat() (data string, err error) {
-	remote := bctl.remote[0]
+func (bctl *BucketCtl) GetStat() (data []byte, err error) {
+	remote := bctl.Remote[0]
 
 	resp, err := http.Get(remote + "/stat/")
 	if err != nil {
 		log.Printf("Could not grab remote statistics from %s: %v", remote, err)
-		return nil, err
+		return
 	}
-	defer res.Body.Close()
+	defer resp.Body.Close()
 
 	data, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("Could not read remote statistics from reply %s: %v", remote, err)
-		return nil, err
+		return
 	}
 
 	return data, nil
@@ -176,11 +185,70 @@ func (bctl *BucketCtl) ParseStat(data []byte) (err error) {
 	return nil
 }
 
+func (bctl *BucketCtl) CheckAuth(r *http.Request) (user string, err error) {
+	if len(bctl.Acl) == 0 {
+		err = nil
+		return
+	}
+
+	user, recv_auth, err := auth.GetAuthInfo(r)
+	if err != nil {
+		return
+	}
+
+	acl, ok := bctl.Acl[user]
+	if !ok {
+		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
+			fmt.Sprintf("url: %s: there is no user '%s' in ACL\n", r.URL, user))
+		return
+	}
+
+	calc_auth, err := auth.GenerateSignature(acl.token, r.Method, r.URL, r.Header)
+	if err != nil {
+		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
+			fmt.Sprintf("url: %s: hmac generation failed: %s\n", r.URL, err))
+		return
+	}
+
+	if recv_auth != calc_auth {
+		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
+			fmt.Sprintf("url: %s: hmac mismatch: recv: '%s', calc: '%s'\n",
+				r.URL, recv_auth, calc_auth))
+		return
+	}
+
+	return
+}
+
+func (bctl *BucketCtl) GenAuthHeader(user string, r *http.Request) (sign string, err error) {
+	sign = fmt.Sprintf("riftv1 %s:", user)
+	if len(bctl.Acl) == 0 {
+		err = nil
+		return
+	}
+
+	acl, ok := bctl.Acl[user]
+	if !ok {
+		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
+			fmt.Sprintf("url: %s: there is no user '%s' in ACL\n", r.URL, user))
+		return
+	}
+
+	sign, err = auth.GenerateSignature(acl.token, r.Method, r.URL, r.Header)
+	if err != nil {
+		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
+			fmt.Sprintf("url: %s: hmac generation failed: %s\n", r.URL, err))
+		return
+	}
+
+	return
+}
+
 func NewBucketCtl(remote []string, bucket_path, acl_path string) (bctl BucketCtl, err error) {
 	bctl = BucketCtl{
-		remote:	remote,
-		bucket: make([]Bucket, 0, 10),
-		acl:    make(map[string]BucketACL),
+		Remote:	remote,
+		Bucket: make([]Bucket, 0, 10),
+		Acl:    make(map[string]BucketACL),
 	}
 
 	data, err := ioutil.ReadFile(bucket_path)
@@ -190,11 +258,11 @@ func NewBucketCtl(remote []string, bucket_path, acl_path string) (bctl BucketCtl
 
 	for _, name := range strings.Split(string(data), "\n") {
 		if len(name) > 0 {
-			bctl.bucket = append(bctl.bucket, NewBucket(name))
+			bctl.Bucket = append(bctl.Bucket, NewBucket(name))
 		}
 	}
 
-	if len(bctl.bucket) == 0 {
+	if len(bctl.Bucket) == 0 {
 		log.Fatal("No buckets found in bucket file")
 	}
 
@@ -203,12 +271,12 @@ func NewBucketCtl(remote []string, bucket_path, acl_path string) (bctl BucketCtl
 		log.Fatal("Failed to process ACL file", err)
 	}
 
-	data, err := bctl.GetStat()
+	data, err = bctl.GetStat()
 	if err != nil {
 		log.Fatal("Could not grab initial stats: %v", err)
 	}
 
-	err = bctl.ParseStats(data)
+	err = bctl.ParseStat(data)
 	if err != nil {
 		log.Fatal("Could not parse initial stats: %v", err)
 	}

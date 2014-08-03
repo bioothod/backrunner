@@ -1,8 +1,9 @@
-package main
+package bmeta
 
 import (
 	"flag"
 	"fmt"
+	"github.com/bioothod/backrunner/bucket"
 	"github.com/bioothod/elliptics-go/elliptics"
 	"github.com/vmihailenco/msgpack"
 	"log"
