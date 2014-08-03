@@ -268,17 +268,17 @@ func NewBucketCtl(remote []string, bucket_path, acl_path string) (bctl BucketCtl
 
 	err = bctl.open_acl(acl_path)
 	if err != nil {
-		log.Fatal("Failed to process ACL file", err)
+		log.Fatalf("Failed to process ACL file: %q", err)
 	}
 
 	data, err = bctl.GetStat()
 	if err != nil {
-		log.Fatal("Could not grab initial stats: %v", err)
+		log.Fatalf("Could not grab initial stats: %q", err)
 	}
 
 	err = bctl.ParseStat(data)
 	if err != nil {
-		log.Fatal("Could not parse initial stats: %v", err)
+		log.Fatalf("Could not parse initial stats: %q", err)
 	}
 
 	return bctl, nil

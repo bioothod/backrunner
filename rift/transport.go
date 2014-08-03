@@ -70,35 +70,25 @@ func (r *Rift) Upload(req *transport.Request) (resp *transport.Response, err err
 	return
 }
 
-func NoProxyAllowed(req *http.Request) (*url.URL, error) {
-	return nil, nil
-}
-
-func (r *Rift) Init(remote []string) (err error) {
-	err = nil
-
-	r.client = &http.Client{
-		Transport: &http.Transport{
-			Proxy:               NoProxyAllowed,
-			MaxIdleConnsPerHost: 1024,
-			DisableKeepAlives:   false,
-			DisableCompression:  false,
-			Dial: func(network, addr string) (net.Conn, error) {
-				return NewTimeoutConnDial(network, addr, transport.DEFAULT_IDLE_TIMEOUT)
+func NewRiftTransport(remote []string) (r *Rift, err error) {
+	r = &Rift {
+		remote: remote,
+		client: &http.Client {
+			Transport: &http.Transport {
+				Proxy:			func (req *http.Request) (*url.URL, error) {
+								// no proxy allowed
+								return nil, nil
+							},
+				MaxIdleConnsPerHost:	1024,
+				DisableKeepAlives:	false,
+				DisableCompression:	false,
+				Dial:			func (network, addr string) (net.Conn, error) {
+								return NewTimeoutConnDial(network, addr, transport.DEFAULT_IDLE_TIMEOUT)
+							},
 			},
 		},
 	}
 
-	return
-}
-
-func NewRiftTransport(remote []string) (r *Rift, err error) {
-	r = &Rift{}
-
-	err = r.Init(remote)
-	if err != nil {
-		return
-	}
-
+	err = nil
 	return
 }

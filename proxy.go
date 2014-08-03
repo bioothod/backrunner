@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/bioothod/backrunner/bucket"
+	"github.com/bioothod/backrunner/elliptics"
 	"github.com/bioothod/backrunner/errors"
 	"github.com/bioothod/backrunner/rift"
 	"github.com/bioothod/backrunner/transport"
@@ -161,29 +162,47 @@ func main() {
 	listen := flag.String("listen", "0.0.0.0:9090", "listen and serve address")
 	buckets := flag.String("buckets", "", "buckets file (file format: new-line separated list of bucket names)")
 	acl := flag.String("acl", "", "ACL file in the same JSON format as RIFT buckets")
+	config := flag.String("config", "", "Transport config file")
+	tname := flag.String("transport", "rift", "Transport name: rift or elliptics")
 	flag.Parse()
-
-	if len(remotes) == 0 {
-		log.Fatal("no remote nodes specified")
-	}
 
 	if *buckets == "" {
 		log.Fatal("there is no buckets file")
 	}
 
-	rand.Seed(9)
+	if *acl == "" {
+		log.Fatal("there is no ACL file")
+	}
 
 	var err error
+	if *tname == "rift" {
+		if len(remotes) == 0 {
+			log.Fatal("No remote nodes specified")
+		}
+
+		proxy.transport, err = rift.NewRiftTransport(remotes)
+	} else if *tname == "elliptics" {
+		if *config == "" {
+			log.Fatal("You must specify config file")
+		}
+		proxy.transport, err = elliptics.NewEllipticsTransport(*config)
+	} else {
+		log.Fatalf("Unsupported transport name '%s'", *tname)
+	}
+
+	if err != nil {
+		log.Fatalf("Could not create %s transport", *tname, err)
+	}
+
+	rand.Seed(9)
+
 	proxy.bctl, err = bucket.NewBucketCtl(remotes, *buckets, *acl)
 	if err != nil {
 		log.Fatal("Could not process buckets file '"+*buckets+"'", err)
 	}
 
 	proxy.host = remotes[0]
-	proxy.transport, err = rift.NewRiftTransport(remotes)
-	if err != nil {
-		log.Fatal("Could not create RIFT transport", err)
-	}
+
 
 	server := getTimeoutServer(*listen, http.HandlerFunc(generic_handler))
 

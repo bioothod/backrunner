@@ -25,5 +25,4 @@ type Response struct {
 
 type Transport interface {
 	Upload(req *Request) (resp *Response, err error)
-	Init(remote []string) (err error)
 }
