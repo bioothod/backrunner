@@ -51,12 +51,17 @@ func NewEllipticsTransport(config_file string) (e *Elliptics, err error) {
 		log.Fatal("'remote' config parameter must be set")
 	}
 
-	e.file, err = os.OpenFile(conf["log-file"].(string), os.O_RDWR, 0644)
+	prefix := ""
+	if conf["log-prefix"] != nil {
+		prefix = conf["log-prefix"].(string)
+	}
+
+	e.file, err = os.OpenFile(conf["log-file"].(string), os.O_RDWR | os.O_APPEND | os.O_CREATE, 0644)
 	if err != nil {
 		log.Fatalf("Could not open log file '%s': %q", conf["log-file"].(string), err)
 	}
 
-	e.log = log.New(e.file, "test-prefix:", log.LstdFlags | log.Lmicroseconds)
+	e.log = log.New(e.file, prefix, log.LstdFlags | log.Lmicroseconds)
 	e.log.Printf("test\n")
 
 	e.node, err = elliptics.NewNodeLog(unsafe.Pointer(&GoLogVar), unsafe.Pointer(e), int(conf["log-level"].(float64)))

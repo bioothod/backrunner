@@ -1,6 +1,7 @@
 {
 	"log-file": "/dev/stdout",
 	"log-level": 4,
+	"log-prefix": "backrunner: ",
 	"remote": [
 		"s28h.xxx.yandex.net:1026:2",
 		"s28h.xxx.yandex.net:1037:2"
