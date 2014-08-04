@@ -68,11 +68,15 @@ func NewEllipticsTransport(config_file string) (e *Elliptics, err error) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer e.node.Free()
 
 	var remotes []string
 	for _, r := range conf["remote"].([]interface{}) {
 		remotes = append(remotes, r.(string))
+	}
+
+	err = e.node.AddRemotes(remotes)
+	if err != nil {
+		log.Fatalf("Could not connect to any remote node from %q: %q", remotes, err)
 	}
 
 	return
