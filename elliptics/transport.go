@@ -17,10 +17,10 @@ import (
 )
 
 type Elliptics struct {
-	file	io.Writer
-	node	*elliptics.Node
+	log_file	io.Writer
+	log		*log.Logger
 
-	log	*log.Logger
+	node		*elliptics.Node
 }
 
 func GoLogFunc(priv unsafe.Pointer, level int, msg *C.char) {
@@ -56,13 +56,12 @@ func NewEllipticsTransport(config_file string) (e *Elliptics, err error) {
 		prefix = conf["log-prefix"].(string)
 	}
 
-	e.file, err = os.OpenFile(conf["log-file"].(string), os.O_RDWR | os.O_APPEND | os.O_CREATE, 0644)
+	e.log_file, err = os.OpenFile(conf["log-file"].(string), os.O_RDWR | os.O_APPEND | os.O_CREATE, 0644)
 	if err != nil {
 		log.Fatalf("Could not open log file '%s': %q", conf["log-file"].(string), err)
 	}
 
-	e.log = log.New(e.file, prefix, log.LstdFlags | log.Lmicroseconds)
-	e.log.Printf("test\n")
+	e.log = log.New(e.log_file, prefix, log.LstdFlags | log.Lmicroseconds)
 
 	e.node, err = elliptics.NewNodeLog(unsafe.Pointer(&GoLogVar), unsafe.Pointer(e), int(conf["log-level"].(float64)))
 	if err != nil {
