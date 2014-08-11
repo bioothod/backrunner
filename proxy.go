@@ -129,6 +129,9 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 		get_handler(w, req, Key(req, get_prefix))
 		return
 	}
+
+	http.Error(w, fmt.Sprintf("url: %s: there is no registered handler for this path", req.URL.Path),
+		http.StatusBadRequest)
 }
 
 func getTimeoutServer(addr string, handler http.Handler) *http.Server {
