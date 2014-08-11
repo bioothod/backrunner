@@ -1,6 +1,7 @@
 package bucket
 
 import (
+	"encoding/hex"
 	"github.com/bioothod/backrunner/auth"
 	"github.com/bioothod/backrunner/errors"
 	"github.com/bioothod/backrunner/etransport"
@@ -186,8 +187,8 @@ func (bctl *BucketCtl) Upload(key string, req *http.Request) (reply map[string]i
 
 	err = bucket.check_auth(req)
 	if err != nil {
-		err = errors.NewKeyError(req.URL.String(), 500,
-			fmt.Sprintf("upload: %s", err.Error()))
+		err = errors.NewKeyError(req.URL.String(), errors.ErrorStatus(err),
+			fmt.Sprintf("upload: %s", errors.ErrorData(err)))
 		return
 	}
 
@@ -216,13 +217,13 @@ func (bctl *BucketCtl) Upload(key string, req *http.Request) (reply map[string]i
 	defer req.Body.Close()
 
 	for l := range s.WriteData(key, string(data)) {
-		ret = make(map[string]interface{})
+		ret := make(map[string]interface{})
 		if l.Error() != nil {
-			egroups = append(egroups, wd.Cmd().ID.Group)
+			egroups = append(egroups, l.Cmd().ID.Group)
 
 			ret["error"] = fmt.Sprintf("%v", l.Error())
 		} else {
-			sgroups = append(sgroups, wd.Cmd().ID.Group)
+			sgroups = append(sgroups, l.Cmd().ID.Group)
 
 			ret["id"] = hex.EncodeToString(l.Cmd().ID.ID)
 			ret["csum"] = hex.EncodeToString(l.Info().Csum)

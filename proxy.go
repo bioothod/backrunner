@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/bioothod/backrunner/errors"
 	"github.com/bioothod/backrunner/bucket"
 	"github.com/bioothod/backrunner/etransport"
 	"log"
@@ -37,7 +38,7 @@ func upload_handler(w http.ResponseWriter, req *http.Request) {
 
 	resp, bucket, err := proxy.bctl.Upload(key, req)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
 		return
 	}
 
@@ -53,12 +54,11 @@ func upload_handler(w http.ResponseWriter, req *http.Request) {
 		Reply   *map[string]interface{} `json:"reply"`
 	}
 
-	log.Printf("response: %v\n", resp)
 	reply := upload_reply {
 		Bucket: bucket.Name,
-		Key:	key,
 		Reply:  &resp,
 		Primary: ent_reply{
+			Key:	key,
 			Get:    "GET " + proxy.local_url(key, bucket.Name, "get"),
 			Update: "POST " + proxy.local_url(key, bucket.Name, "upload"),
 			Delete: "POST " + proxy.local_url(key, bucket.Name, "delete"),

@@ -16,8 +16,20 @@ func (k *KeyError) Error() string {
 		k.url, k.status, k.data)
 }
 
-func (k *KeyError) Status() int {
-	return k.status
+func ErrorStatus(err error) int {
+	if ke, ok := err.(*KeyError); ok {
+		return ke.status
+	}
+
+	return 555
+}
+
+func ErrorData(err error) string {
+	if ke, ok := err.(*KeyError); ok {
+		return ke.data
+	}
+
+	return err.Error()
 }
 
 func NewKeyError(url string, status int, data string) (err *KeyError) {
@@ -29,4 +41,3 @@ func NewKeyError(url string, status int, data string) (err *KeyError) {
 	log.Printf("%v\n", err.Error())
 	return
 }
-
