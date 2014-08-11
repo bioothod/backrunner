@@ -11,13 +11,13 @@ type KeyError struct {
 	data	string
 }
 
-func (k *KeyError) Error() string {
+func (k KeyError) Error() string {
 	return fmt.Sprintf("url: %s: error code: %d, returned data: '%s'",
 		k.url, k.status, k.data)
 }
 
 func ErrorStatus(err error) int {
-	if ke, ok := err.(*KeyError); ok {
+	if ke, ok := err.(KeyError); ok {
 		return ke.status
 	}
 
@@ -25,7 +25,7 @@ func ErrorStatus(err error) int {
 }
 
 func ErrorData(err error) string {
-	if ke, ok := err.(*KeyError); ok {
+	if ke, ok := err.(KeyError); ok {
 		return ke.data
 	}
 
