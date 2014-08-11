@@ -61,6 +61,30 @@ func (meta *BucketMsgpack) ExtractMsgpack(out []interface{}) (err error) {
 		}
 	}
 	meta.bucket = out[1].(string)
+
+	meta.acl = make(map[string]BucketACL)
+	for _, i := range out[2].(map[interface{}]interface{}) {
+		var acl BucketACL
+		x := i.([]interface{})
+
+		if v, ok := x[0].(int32); ok {
+			acl.version = v
+		}
+		if v, ok := x[1].(string); ok {
+			acl.user = v
+		}
+		if v, ok := x[2].(string); ok {
+			acl.token = v
+		}
+		if v, ok := x[3].(uint64); ok {
+			acl.flags = v
+		}
+
+		if len(acl.user) != 0 {
+			meta.acl[acl.user] = acl
+		}
+	}
+
 	for _, x := range out[3].([]interface{}) {
 		meta.groups = append(meta.groups, int32(x.(int64)))
 	}

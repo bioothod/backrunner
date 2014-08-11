@@ -1,15 +1,15 @@
 {
-	"groups": [32,12],
+	"groups": [1,2],
 	"acl": [
 		{
 			"user": "*",
 			"token": "secure unused wildcard token",
-			"flags": 1
+			"flags": 7
 		},
 		{
 			"user": "writer",
 			"token": "secure token",
-			"flags": 0
+			"flags": 7
 		}
 	],
 	"flags": 0,
