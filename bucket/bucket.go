@@ -3,285 +3,26 @@ package bucket
 import (
 	"github.com/bioothod/backrunner/auth"
 	"github.com/bioothod/backrunner/errors"
-	"encoding/json"
+	"github.com/bioothod/backrunner/etransport"
+	"github.com/vmihailenco/msgpack"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"math"
 	"math/rand"
 	"net/http"
-	"os"
 	"strings"
 	"sync/atomic"
 	"time"
 )
+
+const BucketNamespace string = "bucket"
 
 type BucketACL struct {
 	version int32
 	user    string
 	token   string
 	flags   uint64
-}
-type acl_json struct {
-	User  string `json:"user"`
-	Token string `json:"token"`
-	Flags uint64 `json:"flags"`
-}
-
-type Bucket struct {
-	Name	string
-	Backend	map[string]Backend
-
-	Rate	float64
-	Packets int64
-	Time    time.Time
-}
-
-type Backend struct {
-	Id	string // hostname in elliptics 2.25
-	Rate	float64
-	Packets int64
-	Time    time.Time
-}
-
-func NewBackend(name string) Backend {
-	return Backend {
-		Id:		name,
-		Rate:		1024 * 1024 * 1024 * 100,
-		Time:		time.Now(),
-		Packets:	0,
-	}
-}
-
-func NewBucket(name string) Bucket {
-	fmt.Printf("bucket: %s\n", name)
-	return Bucket{
-		Name:		name,
-		Backend:	make(map[string]Backend),
-
-		Rate:		1024 * 1024 * 1024 * 100,
-		Packets:	0,
-		Time:		time.Now(),
-	}
-}
-
-type BucketCtl struct {
-	Remote	[]string
-	Bucket	[]Bucket
-	Acl	map[string]BucketACL
-}
-
-var (
-	BucketNamespace string = "bucket"
-)
-
-func (bctl *BucketCtl) open_acl(path string) (err error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return
-	}
-
-	data := make([]byte, 1024)
-
-	count, err := file.Read(data)
-	if err != nil {
-		return
-	}
-
-	var jacl []acl_json
-	err = json.Unmarshal(data[:count], &jacl)
-	if err != nil {
-		return
-	}
-
-	bctl.Acl = make(map[string]BucketACL)
-	for _, a := range jacl {
-		var e BucketACL
-
-		e.user = a.User
-		e.token = a.Token
-		e.flags = a.Flags
-		e.version = 1
-
-		bctl.Acl[e.user] = e
-	}
-
-	return
-}
-
-func (bctl *BucketCtl) GetBucket() (bucket *Bucket) {
-	sum := 0.0
-	for i := range bctl.Bucket {
-		b := &bctl.Bucket[i]
-		sum += b.Rate
-	}
-
-	r := rand.Int63n(int64(sum))
-	for i, _ := range bctl.Bucket {
-		b := &bctl.Bucket[i]
-
-		r -= int64(b.Rate)
-		if r < 0 {
-			return b
-		}
-	}
-
-	// error, should never reach this point
-	return &bctl.Bucket[rand.Intn(len(bctl.Bucket))]
-}
-
-func MovingExpAvg(value, oldValue, fdtime, ftime float64) float64 {
-	alpha := 1.0 - math.Exp(-fdtime/ftime)
-	r := alpha*value + (1.0-alpha)*oldValue
-	return r
-}
-
-func (bucket *Bucket) SetRate(rate float64) {
-	t := time.Now()
-	diff := t.Sub(bucket.Time).Seconds()
-	bucket.Rate = MovingExpAvg(rate, bucket.Rate, float64(diff), 1.0)
-
-	bucket.Time = t
-	atomic.AddInt64(&bucket.Packets, 1)
-}
-
-func (bucket *Bucket) HalfRate() {
-	t := time.Now()
-	diff := t.Sub(bucket.Time).Seconds()
-	bucket.Rate = MovingExpAvg(bucket.Rate/2.0, bucket.Rate, float64(diff), 1.0)
-
-	bucket.Time = t
-}
-
-func (bctl *BucketCtl) GetStat() (data []byte, err error) {
-	remote := bctl.Remote[0]
-
-	resp, err := http.Get(remote + "/stat/")
-	if err != nil {
-		log.Printf("Could not grab remote statistics from %s: %v", remote, err)
-		return
-	}
-	defer resp.Body.Close()
-
-	data, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("Could not read remote statistics from reply %s: %v", remote, err)
-		return
-	}
-
-	return data, nil
-}
-
-func (bctl *BucketCtl) ParseStat(data []byte) (err error) {
-	var jdata interface{}
-
-	err = json.Unmarshal(data, &jdata)
-	if err != nil {
-		log.Printf("Could not parse statistics '%q': %v", data, err)
-		return err
-	}
-
-	log.Printf("%q\n", jdata)
-	return nil
-}
-
-func (bctl *BucketCtl) CheckAuth(r *http.Request) (user string, err error) {
-	if len(bctl.Acl) == 0 {
-		err = nil
-		return
-	}
-
-	user, recv_auth, err := auth.GetAuthInfo(r)
-	if err != nil {
-		return
-	}
-
-	acl, ok := bctl.Acl[user]
-	if !ok {
-		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
-			fmt.Sprintf("url: %s: there is no user '%s' in ACL\n", r.URL, user))
-		return
-	}
-
-	calc_auth, err := auth.GenerateSignature(acl.token, r.Method, r.URL, r.Header)
-	if err != nil {
-		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
-			fmt.Sprintf("url: %s: hmac generation failed: %s\n", r.URL, err))
-		return
-	}
-
-	if recv_auth != calc_auth {
-		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
-			fmt.Sprintf("url: %s: hmac mismatch: recv: '%s', calc: '%s'\n",
-				r.URL, recv_auth, calc_auth))
-		return
-	}
-
-	return
-}
-
-func (bctl *BucketCtl) GenAuthHeader(user string, r *http.Request) (sign string, err error) {
-	sign = fmt.Sprintf("riftv1 %s:", user)
-	if len(bctl.Acl) == 0 {
-		err = nil
-		return
-	}
-
-	acl, ok := bctl.Acl[user]
-	if !ok {
-		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
-			fmt.Sprintf("url: %s: there is no user '%s' in ACL\n", r.URL, user))
-		return
-	}
-
-	sign, err = auth.GenerateSignature(acl.token, r.Method, r.URL, r.Header)
-	if err != nil {
-		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
-			fmt.Sprintf("url: %s: hmac generation failed: %s\n", r.URL, err))
-		return
-	}
-
-	return
-}
-
-func NewBucketCtl(remote []string, bucket_path, acl_path string) (bctl BucketCtl, err error) {
-	bctl = BucketCtl{
-		Remote:	remote,
-		Bucket: make([]Bucket, 0, 10),
-		Acl:    make(map[string]BucketACL),
-	}
-
-	data, err := ioutil.ReadFile(bucket_path)
-	if err != nil {
-		return
-	}
-
-	for _, name := range strings.Split(string(data), "\n") {
-		if len(name) > 0 {
-			bctl.Bucket = append(bctl.Bucket, NewBucket(name))
-		}
-	}
-
-	if len(bctl.Bucket) == 0 {
-		log.Fatal("No buckets found in bucket file")
-	}
-
-	err = bctl.open_acl(acl_path)
-	if err != nil {
-		log.Fatalf("Failed to process ACL file: %q", err)
-	}
-
-	data, err = bctl.GetStat()
-	if err != nil {
-		log.Fatalf("Could not grab initial stats: %q", err)
-	}
-
-	err = bctl.ParseStat(data)
-	if err != nil {
-		log.Fatalf("Could not parse initial stats: %q", err)
-	}
-
-	return bctl, nil
 }
 
 type ExtractError struct {
@@ -327,4 +68,254 @@ func (meta *BucketMsgpack) ExtractMsgpack(out []interface{}) (err error) {
 	meta.max_key_num = uint64(out[6].(int64))
 
 	return nil
+}
+
+type Bucket struct {
+	Name	string
+	Backend	map[string]Backend
+
+	meta	BucketMsgpack
+
+	Rate	float64
+	Packets int64
+	Time    time.Time
+}
+
+type Backend struct {
+	Id	string // hostname in elliptics 2.25
+	Rate	float64
+	Packets int64
+	Time    time.Time
+}
+
+func NewBackend(name string) Backend {
+	return Backend {
+		Id:		name,
+		Rate:		1024 * 1024 * 1024 * 100,
+		Time:		time.Now(),
+		Packets:	0,
+	}
+}
+
+type BucketCtl struct {
+	e	*etransport.Elliptics
+	Bucket	[]*Bucket
+}
+
+func (bctl *BucketCtl) GetBucket() (bucket *Bucket) {
+	sum := 0.0
+	for i := range bctl.Bucket {
+		b := bctl.Bucket[i]
+		sum += b.Rate
+	}
+
+	r := rand.Int63n(int64(sum))
+	for i, _ := range bctl.Bucket {
+		b := bctl.Bucket[i]
+
+		r -= int64(b.Rate)
+		if r < 0 {
+			return b
+		}
+	}
+
+	// error, should never reach this point
+	return bctl.Bucket[rand.Intn(len(bctl.Bucket))]
+}
+
+func MovingExpAvg(value, oldValue, fdtime, ftime float64) float64 {
+	alpha := 1.0 - math.Exp(-fdtime/ftime)
+	r := alpha*value + (1.0-alpha)*oldValue
+	return r
+}
+
+func (bucket *Bucket) SetRate(rate float64) {
+	t := time.Now()
+	diff := t.Sub(bucket.Time).Seconds()
+	bucket.Rate = MovingExpAvg(rate, bucket.Rate, float64(diff), 1.0)
+
+	bucket.Time = t
+	atomic.AddInt64(&bucket.Packets, 1)
+}
+
+func (bucket *Bucket) HalfRate() {
+	t := time.Now()
+	diff := t.Sub(bucket.Time).Seconds()
+	bucket.Rate = MovingExpAvg(bucket.Rate/2.0, bucket.Rate, float64(diff), 1.0)
+
+	bucket.Time = t
+}
+
+func (b *Bucket) check_auth(r *http.Request) (err error) {
+	if len(b.meta.acl) == 0 {
+		err = nil
+		return
+	}
+
+	user, recv_auth, err := auth.GetAuthInfo(r)
+	if err != nil {
+		return
+	}
+
+	acl, ok := b.meta.acl[user]
+	if !ok {
+		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
+			fmt.Sprintf("auth: there is no user '%s' in ACL", user))
+		return
+	}
+
+	calc_auth, err := auth.GenerateSignature(acl.token, r.Method, r.URL, r.Header)
+	if err != nil {
+		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
+			fmt.Sprintf("auth: hmac generation failed: %s", err))
+		return
+	}
+
+	if recv_auth != calc_auth {
+		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
+			fmt.Sprintf("auth: hmac mismatch: recv: '%s', calc: '%s'",
+				recv_auth, calc_auth))
+		return
+	}
+
+	return
+}
+
+func (bctl *BucketCtl) Upload(key string, req *http.Request) (reply map[string]interface{}, bucket *Bucket, err error) {
+	bucket = bctl.GetBucket()
+
+	err = bucket.check_auth(req)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), 500,
+			fmt.Sprintf("upload: %s", err.Error()))
+		return
+	}
+
+	s, err := bctl.e.DataSession()
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
+			fmt.Sprintf("upload: could not create data session: %v", err))
+		return
+	}
+
+	s.SetNamespace(bucket.Name)
+	s.SetGroups(bucket.meta.groups)
+
+	var info []interface{}
+	var egroups, sgroups []uint32
+
+	egroups = make([]uint32, 0)
+	sgroups = make([]uint32, 0)
+
+	data, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
+			fmt.Sprintf("upload: could not read data: %v", err))
+		return
+	}
+	defer req.Body.Close()
+
+	for l := range s.WriteData(key, string(data)) {
+		ret = make(map[string]interface{})
+		if l.Error() != nil {
+			egroups = append(egroups, wd.Cmd().ID.Group)
+
+			ret["error"] = fmt.Sprintf("%v", l.Error())
+		} else {
+			sgroups = append(sgroups, wd.Cmd().ID.Group)
+
+			ret["id"] = hex.EncodeToString(l.Cmd().ID.ID)
+			ret["csum"] = hex.EncodeToString(l.Info().Csum)
+			ret["filename"] = l.Path()
+			ret["size"] = l.Info().Size
+			ret["offset-within-data-file"] = l.Info().Offset
+			ret["mtime"] = l.Info().Mtime.String()
+			ret["server"] = l.StorageAddr().String()
+		}
+
+		info = append(info, ret)
+	}
+
+	reply = make(map[string]interface{})
+	reply["info"] = info
+	reply["success-groups"] = sgroups
+	reply["error-groups"] = egroups
+
+	return
+}
+
+func (bctl *BucketCtl) NewBucket(name string) (bucket *Bucket, err error) {
+	ms, err := bctl.e.MetadataSession()
+	if err != nil {
+		log.Printf("%s: could not create metadata session: %v", name, err)
+		return
+	}
+
+	ms.SetNamespace(BucketNamespace)
+
+	b := &Bucket {
+		Name:		name,
+		Backend:	make(map[string]Backend),
+
+		Rate:		1024 * 1024 * 1024 * 100,
+		Packets:	0,
+		Time:		time.Now(),
+	}
+
+	for rd := range ms.ReadData(name) {
+		if rd.Error() != nil {
+			err = rd.Error()
+
+			log.Printf("%s: could not read bucket metadata: %v", name, err)
+			return
+		}
+
+		var out []interface{}
+		err = msgpack.Unmarshal([]byte(rd.Data()), &out)
+		if err != nil {
+			log.Printf("%s: could not parse bucket metadata: %v", name, err)
+			return
+		}
+
+		err = b.meta.ExtractMsgpack(out)
+		if err != nil {
+			log.Printf("%s: unsupported msgpack data:", name, err)
+		}
+
+		log.Printf("%s: groups: %v, acl: %v\n", b.Name, b.meta.groups, b.meta.acl)
+		bucket = b
+		return
+	}
+
+	err = errors.NewKeyError(name, http.StatusNotFound, "could not read bucket data: ReadData() returned nothing")
+	return
+}
+
+func NewBucketCtl(bucket_path string, e *etransport.Elliptics) (bctl *BucketCtl, err error) {
+	bctl = &BucketCtl {
+		e:		e,
+		Bucket:		make([]*Bucket, 0, 10),
+	}
+
+	data, err := ioutil.ReadFile(bucket_path)
+	if err != nil {
+		return
+	}
+
+	for _, name := range strings.Split(string(data), "\n") {
+		if len(name) > 0 {
+			b, err := bctl.NewBucket(name)
+			if err != nil {
+				continue
+			}
+
+			bctl.Bucket = append(bctl.Bucket, b)
+		}
+	}
+
+	if len(bctl.Bucket) == 0 {
+		log.Fatal("No buckets found in bucket file")
+	}
+
+	return bctl, nil
 }

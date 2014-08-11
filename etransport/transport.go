@@ -1,4 +1,4 @@
-package elliptics
+package etransport
 
 import (
 	"C"
@@ -8,7 +8,6 @@ import (
 	//"github.com/bioothod/backrunner/auth"
 	"github.com/bioothod/backrunner/config"
 	//"github.com/bioothod/backrunner/errors"
-	"github.com/bioothod/backrunner/transport"
 	//"github.com/vmihailenco/msgpack"
 	"io"
 	"log"
@@ -21,6 +20,7 @@ type Elliptics struct {
 	log		*log.Logger
 
 	node		*elliptics.Node
+	metadata_groups	[]int32
 }
 
 func GoLogFunc(priv unsafe.Pointer, level int, msg *C.char) {
@@ -29,7 +29,22 @@ func GoLogFunc(priv unsafe.Pointer, level int, msg *C.char) {
 }
 var GoLogVar = GoLogFunc
 
-func (e *Elliptics) Upload(req *transport.Request) (resp *transport.Response, err error) {
+func (e *Elliptics) MetadataSession() (ms *elliptics.Session, err error) {
+	ms, err = elliptics.NewSession(e.node)
+	if err != nil {
+		return
+	}
+
+	ms.SetGroups(e.metadata_groups)
+	return
+}
+
+func (e *Elliptics) DataSession() (s *elliptics.Session, err error) {
+	s, err = elliptics.NewSession(e.node)
+	if err != nil {
+		return
+	}
+
 	return
 }
 
@@ -43,17 +58,13 @@ func NewEllipticsTransport(config_file string) (e *Elliptics, err error) {
 	}
 	conf := conf_interface.(map[string]interface{})
 
-	if conf["log-file"] == nil || conf["log-level"] == nil {
-		log.Fatal("'log-file' and 'log-level' config parameters must be set")
-	}
-
-	if conf["remote"] == nil {
-		log.Fatal("'remote' config parameter must be set")
-	}
-
 	prefix := ""
 	if conf["log-prefix"] != nil {
 		prefix = conf["log-prefix"].(string)
+	}
+
+	if conf["log-file"] == nil || conf["log-level"] == nil {
+		log.Fatal("'log-file' and 'log-level' config parameters must be set")
 	}
 
 	e.log_file, err = os.OpenFile(conf["log-file"].(string), os.O_RDWR | os.O_APPEND | os.O_CREATE, 0644)
@@ -63,14 +74,29 @@ func NewEllipticsTransport(config_file string) (e *Elliptics, err error) {
 
 	e.log = log.New(e.log_file, prefix, log.LstdFlags | log.Lmicroseconds)
 
+
 	e.node, err = elliptics.NewNodeLog(unsafe.Pointer(&GoLogVar), unsafe.Pointer(e), int(conf["log-level"].(float64)))
 	if err != nil {
 		log.Fatal(err)
 	}
 
+
+	if conf["remote"] == nil {
+		log.Fatal("'remote' config parameter must be set")
+	}
+
 	var remotes []string
 	for _, r := range conf["remote"].([]interface{}) {
 		remotes = append(remotes, r.(string))
+	}
+
+
+	if conf["metadata-groups"] == nil {
+		log.Fatal("'metadata-groups' config parameter must be set")
+	}
+
+	for _, m := range conf["metadata-groups"].([]interface{}) {
+		e.metadata_groups = append(e.metadata_groups, int32(m.(float64)))
 	}
 
 	err = e.node.AddRemotes(remotes)

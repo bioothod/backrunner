@@ -22,24 +22,24 @@ func GetAuthInfo(r *http.Request) (user, recv_auth string, err error) {
 	auth_headers, ok := r.Header[AuthHeaderStr]
 	if !ok {
 		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
-			fmt.Sprintf("url: %s: there is no '%s' header\n",
-				r.URL, AuthHeaderStr))
+			fmt.Sprintf("auth: there is no '%s' header",
+				AuthHeaderStr))
 		return
 	}
 
 	auth_data := strings.Split(auth_headers[0], " ")
 	if len(auth_data) != 2 {
 		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
-			fmt.Sprintf("url: %s: auth header1 '%s' must be 'riftv1 user:hmac'\n",
-				r.URL, auth_headers[0]))
+			fmt.Sprintf("auth: auth header1 '%s' must be 'riftv1 user:hmac'",
+				auth_headers[0]))
 		return
 	}
 
 	auth_data = strings.Split(auth_data[1], ":")
 	if len(auth_data) != 2 {
 		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
-			fmt.Sprintf("url: %s: auth header2 '%s' must be 'riftv1 user:hmac'\n",
-				r.URL, auth_headers[0]))
+			fmt.Sprintf("auth: auth header2 '%s' must be 'riftv1 user:hmac'",
+				auth_headers[0]))
 		return
 	}
 
@@ -107,7 +107,7 @@ func main1() {
 	headers := make(map[string][]string)
 	headers["QWE"] = []string{"qwe string"}
 	headers["X-ell-ololo"] = []string{"trash", "secong header which is ignored"}
-	u, err := url.Parse("http://storage.coub.com/get/bucket:12.21/test.txt?user=Mary&timestamp=12345&boolean")
+	u, err := url.Parse("http://localhost/get/bucket:12.21/test.txt?user=Mary&timestamp=12345&boolean")
 	if err != nil {
 		return
 	}

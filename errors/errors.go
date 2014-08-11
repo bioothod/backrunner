@@ -13,16 +13,20 @@ type KeyError struct {
 
 func (k *KeyError) Error() string {
 	return fmt.Sprintf("url: %s: error code: %d, returned data: '%s'",
-		k.url, k.status, fmt.Sprintf("%s", k.data))
+		k.url, k.status, k.data)
 }
 
-func NewKeyError(url string, status int, data string) (err error) {
+func (k *KeyError) Status() int {
+	return k.status
+}
+
+func NewKeyError(url string, status int, data string) (err *KeyError) {
 	err = &KeyError{
 		url:    url,
 		status: status,
 		data:   data,
 	}
-	log.Printf("%s", err)
+	log.Printf("%v\n", err.Error())
 	return
 }
 

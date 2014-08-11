@@ -5,62 +5,40 @@ import (
 	"flag"
 	"fmt"
 	"github.com/bioothod/backrunner/bucket"
-	"github.com/bioothod/backrunner/elliptics"
-	"github.com/bioothod/backrunner/errors"
-	"github.com/bioothod/backrunner/rift"
-	"github.com/bioothod/backrunner/transport"
+	"github.com/bioothod/backrunner/etransport"
 	"log"
 	"math/rand"
 	"net/http"
 	"runtime"
 	"strings"
+	"time"
 )
 
 var (
 	proxy bproxy
 
-	upload_prefix string = "/upload/"
-	ping_prefix   string = "/ping/"
+	upload_prefix	= "/upload/"
+	ping_prefix	= "/ping/"
+	IdleTimeout	= 5 * time.Second
 )
 
 type bproxy struct {
 	host		string
-	bctl		bucket.BucketCtl
-	transport	transport.Transport
+	bctl		*bucket.BucketCtl
+	ell		*etransport.Elliptics
 }
 
 func (p *bproxy) local_url(key, bucket, operation string) string {
 	return fmt.Sprintf("http://%s/%s/%s/%s", p.host, operation, bucket, key)
 }
 
-func upload_handler(w http.ResponseWriter, http_req *http.Request) {
-	var req transport.Request
-	req.Http = http_req
-	req.Key = http_req.URL.Path[len(upload_prefix):]
-	req.Bctl = &proxy.bctl
-	req.Bucket = proxy.bctl.GetBucket()
+func upload_handler(w http.ResponseWriter, req *http.Request) {
+	key := req.URL.Path[len(upload_prefix):]
 
-	var err error
-	req.User, err = req.Bctl.CheckAuth(http_req)
+	resp, bucket, err := proxy.bctl.Upload(key, req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusForbidden)
+		http.Error(w, err.Error(), 500)
 		return
-	}
-
-	resp, err := proxy.transport.Upload(&req)
-	if resp.Status != http.StatusOK {
-		log.Printf("url: %s: transport error: %d", http_req.URL, resp.Status)
-		req.Bucket.HalfRate()
-
-		err = errors.NewKeyError(http_req.URL.String(), resp.Status, string(resp.Data))
-		http.Error(w, err.Error(), resp.Status)
-		return
-	}
-
-	m := resp.Json.(map[string]interface{})
-	rate := m["rate"]
-	if rate != nil {
-		req.Bucket.SetRate(rate.(float64))
 	}
 
 	type ent_reply struct {
@@ -72,23 +50,24 @@ func upload_handler(w http.ResponseWriter, http_req *http.Request) {
 	type upload_reply struct {
 		Bucket  string       `json:"bucket"`
 		Primary ent_reply    `json:"primary"`
-		Reply   *interface{} `json:"reply"`
+		Reply   *map[string]interface{} `json:"reply"`
 	}
 
-	reply := upload_reply{
-		Bucket: req.Bucket.Name,
-		Reply:  &resp.Json,
+	log.Printf("response: %v\n", resp)
+	reply := upload_reply {
+		Bucket: bucket.Name,
+		Key:	key,
+		Reply:  &resp,
 		Primary: ent_reply{
-			Key:    req.Key,
-			Get:    "GET " + proxy.local_url(req.Key, req.Bucket.Name, "get"),
-			Update: "POST " + proxy.local_url(req.Key, req.Bucket.Name, "upload"),
-			Delete: "POST " + proxy.local_url(req.Key, req.Bucket.Name, "delete"),
+			Get:    "GET " + proxy.local_url(key, bucket.Name, "get"),
+			Update: "POST " + proxy.local_url(key, bucket.Name, "upload"),
+			Delete: "POST " + proxy.local_url(key, bucket.Name, "delete"),
 		},
 	}
 
 	reply_json, err := json.Marshal(reply)
 	if err != nil {
-		log.Printf("url: %s: upload: json marshal failed: %q\n", http_req.URL, err)
+		log.Printf("url: %s: upload: json marshal failed: %q\n", req.URL, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -130,16 +109,11 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 
 func getTimeoutServer(addr string, handler http.Handler) *http.Server {
 	//keeps people who are slow or are sending keep-alives from eating all our sockets
-	const (
-		HTTP_READ_TO  = transport.DEFAULT_IDLE_TIMEOUT
-		HTTP_WRITE_TO = transport.DEFAULT_IDLE_TIMEOUT
-	)
-
 	return &http.Server{
 		Addr:         addr,
 		Handler:      handler,
-		ReadTimeout:  HTTP_READ_TO,
-		WriteTimeout: HTTP_WRITE_TO,
+		ReadTimeout:  IdleTimeout,
+		WriteTimeout: IdleTimeout,
 	}
 }
 
@@ -157,51 +131,33 @@ func (str *stringslice) Set(value string) error {
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	var remotes stringslice
-	flag.Var(&remotes, "remote", "connect to the RIFT proxy on given address in the following format: address:port")
 	listen := flag.String("listen", "0.0.0.0:9090", "listen and serve address")
 	buckets := flag.String("buckets", "", "buckets file (file format: new-line separated list of bucket names)")
-	acl := flag.String("acl", "", "ACL file in the same JSON format as RIFT buckets")
 	config := flag.String("config", "", "Transport config file")
-	tname := flag.String("transport", "rift", "Transport name: rift or elliptics")
 	flag.Parse()
 
 	if *buckets == "" {
 		log.Fatal("there is no buckets file")
 	}
 
-	if *acl == "" {
-		log.Fatal("there is no ACL file")
+	if *config == "" {
+		log.Fatal("You must specify config file")
 	}
-
 	var err error
-	if *tname == "rift" {
-		if len(remotes) == 0 {
-			log.Fatal("No remote nodes specified")
-		}
-
-		proxy.transport, err = rift.NewRiftTransport(remotes)
-	} else if *tname == "elliptics" {
-		if *config == "" {
-			log.Fatal("You must specify config file")
-		}
-		proxy.transport, err = elliptics.NewEllipticsTransport(*config)
-	} else {
-		log.Fatalf("Unsupported transport name '%s'", *tname)
-	}
+	proxy.ell, err = etransport.NewEllipticsTransport(*config)
 
 	if err != nil {
-		log.Fatalf("Could not create %s transport", *tname, err)
+		log.Fatalf("Could not create Elliptics transport: %v", err)
 	}
 
 	rand.Seed(9)
 
-	proxy.bctl, err = bucket.NewBucketCtl(remotes, *buckets, *acl)
+	proxy.bctl, err = bucket.NewBucketCtl(*buckets, proxy.ell)
 	if err != nil {
 		log.Fatal("Could not process buckets file '"+*buckets+"'", err)
 	}
 
-	proxy.host = remotes[0]
+	proxy.host = "localhost"
 
 
 	server := getTimeoutServer(*listen, http.HandlerFunc(generic_handler))

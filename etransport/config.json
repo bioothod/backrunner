@@ -1,9 +1,10 @@
 {
 	"log-file": "/dev/stdout",
-	"log-level": 4,
+	"log-level": 2,
 	"log-prefix": "backrunner: ",
 	"remote": [
 		"s28h.xxx.yandex.net:1025:2",
 		"s37h.xxx.yandex.net:1025:2"
-	]
+	],
+	"metadata-groups": [1,2]
 }
