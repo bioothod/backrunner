@@ -14,6 +14,7 @@ import (
 	"math/rand"
 	"net/http"
 	"strings"
+	"syscall"
 	"sync/atomic"
 	"time"
 )
@@ -307,10 +308,10 @@ func (bctl *BucketCtl) Get(bname, key string, req *http.Request) (resp []byte, e
 			message := elliptics.ErrorData(err)
 			status := http.StatusBadRequest
 
-			switch code {
-			case -6:
+			switch syscall.Errno(-code) {
+			case syscall.ENXIO:
 				status = http.StatusServiceUnavailable
-			case -2:
+			case syscall.ENOENT:
 				status = http.StatusNotFound
 			}
 
