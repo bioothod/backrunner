@@ -5,6 +5,7 @@ import (
 	"github.com/bioothod/backrunner/auth"
 	"github.com/bioothod/backrunner/errors"
 	"github.com/bioothod/backrunner/etransport"
+	"github.com/bioothod/elliptics-go/elliptics"
 	"github.com/vmihailenco/msgpack"
 	"fmt"
 	"io/ioutil"
@@ -216,6 +217,14 @@ func (bctl *BucketCtl) Upload(key string, req *http.Request) (reply map[string]i
 		return
 	}
 
+	data, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
+			fmt.Sprintf("upload: could not read data: %v", err))
+		return
+	}
+	defer req.Body.Close()
+
 	s, err := bctl.e.DataSession()
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
@@ -226,19 +235,13 @@ func (bctl *BucketCtl) Upload(key string, req *http.Request) (reply map[string]i
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.meta.groups)
 
+
 	var info []interface{}
 	var egroups, sgroups []uint32
 
 	egroups = make([]uint32, 0)
 	sgroups = make([]uint32, 0)
 
-	data, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
-			fmt.Sprintf("upload: could not read data: %v", err))
-		return
-	}
-	defer req.Body.Close()
 
 	for l := range s.WriteData(key, string(data)) {
 		ret := make(map[string]interface{})
@@ -266,6 +269,59 @@ func (bctl *BucketCtl) Upload(key string, req *http.Request) (reply map[string]i
 	reply["success-groups"] = sgroups
 	reply["error-groups"] = egroups
 
+	return
+}
+
+func (bctl *BucketCtl) Get(bname, key string, req *http.Request) (resp []byte, err error) {
+	var bucket *Bucket = nil
+	ok := false
+
+	for _, bucket = range bctl.Bucket {
+		if bucket.Name == bname {
+			ok = true
+			break
+		}
+	}
+
+	if !ok {
+		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
+			fmt.Sprintf("get: could not find bucket '%s'", bname))
+		return
+	}
+
+	s, err := bctl.e.DataSession()
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
+			fmt.Sprintf("get: could not create data session: %v", err))
+		return
+	}
+
+	s.SetNamespace(bucket.Name)
+	s.SetGroups(bucket.meta.groups)
+
+	for rd := range s.ReadData(key) {
+		if rd.Error() != nil {
+			err = rd.Error()
+
+			code := elliptics.ErrorStatus(err)
+			message := elliptics.ErrorData(err)
+			status := http.StatusBadRequest
+
+			switch code {
+			case -6:
+				status = http.StatusServiceUnavailable
+			case -2:
+				status = http.StatusNotFound
+			}
+
+			err = errors.NewKeyError(req.URL.String(), status,
+				fmt.Sprintf("get: could not read data: elliptics-code: %d, elliptics-message: %s",
+					code, message))
+			return
+		}
+
+		resp = []byte(rd.Data())
+	}
 	return
 }
 

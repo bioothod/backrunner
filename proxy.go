@@ -19,6 +19,7 @@ var (
 	proxy bproxy
 
 	upload_prefix	= "/upload/"
+	get_prefix	= "/get/"
 	ping_prefix	= "/ping/"
 	IdleTimeout	= 5 * time.Second
 )
@@ -29,13 +30,15 @@ type bproxy struct {
 	ell		*etransport.Elliptics
 }
 
+func Key(req *http.Request, prefix string) string {
+	return req.URL.Path[len(prefix):]
+}
+
 func (p *bproxy) local_url(key, bucket, operation string) string {
 	return fmt.Sprintf("http://%s/%s/%s/%s", p.host, operation, bucket, key)
 }
 
-func upload_handler(w http.ResponseWriter, req *http.Request) {
-	key := req.URL.Path[len(upload_prefix):]
-
+func upload_handler(w http.ResponseWriter, req *http.Request, key string) {
 	resp, bucket, err := proxy.bctl.Upload(key, req)
 	if err != nil {
 		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
@@ -95,6 +98,22 @@ func ping_handler(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, message, http.StatusOK)
 }
 
+func get_handler(w http.ResponseWriter, req *http.Request, path string) {
+	kbstrings := strings.SplitN(path, "/", 2)
+
+	bucket := kbstrings[0]
+	key := kbstrings[1]
+
+	resp, err := proxy.bctl.Get(bucket, key, req)
+	if err != nil {
+		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(resp)
+}
+
 func generic_handler(w http.ResponseWriter, req *http.Request) {
 	if strings.HasPrefix(req.URL.Path, ping_prefix) {
 		ping_handler(w, req)
@@ -102,7 +121,12 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if strings.HasPrefix(req.URL.Path, upload_prefix) {
-		upload_handler(w, req)
+		upload_handler(w, req, Key(req, upload_prefix))
+		return
+	}
+
+	if strings.HasPrefix(req.URL.Path, get_prefix) {
+		get_handler(w, req, Key(req, get_prefix))
 		return
 	}
 }
