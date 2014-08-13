@@ -226,7 +226,7 @@ func (bctl *BucketCtl) Upload(key string, req *http.Request) (reply map[string]i
 	}
 	defer req.Body.Close()
 
-	s, err := bctl.e.DataSession()
+	s, err := bctl.e.DataSession(req)
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
 			fmt.Sprintf("upload: could not create data session: %v", err))
@@ -290,7 +290,7 @@ func (bctl *BucketCtl) Get(bname, key string, req *http.Request) (resp []byte, e
 		return
 	}
 
-	s, err := bctl.e.DataSession()
+	s, err := bctl.e.DataSession(req)
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
 			fmt.Sprintf("get: could not create data session: %v", err))

@@ -11,7 +11,9 @@ import (
 	//"github.com/vmihailenco/msgpack"
 	"io"
 	"log"
+	"net/http"
 	"os"
+	"strconv"
 	"unsafe"
 )
 
@@ -39,10 +41,38 @@ func (e *Elliptics) MetadataSession() (ms *elliptics.Session, err error) {
 	return
 }
 
-func (e *Elliptics) DataSession() (s *elliptics.Session, err error) {
+func (e *Elliptics) DataSession(req *http.Request) (s *elliptics.Session, err error) {
 	s, err = elliptics.NewSession(e.node)
 	if err != nil {
 		return
+	}
+
+	values := req.URL.Query()
+	var val uint64
+
+	ioflags, ok := values["ioflags"]
+	if ok {
+		val, err = strconv.ParseUint(ioflags[0], 0, 32)
+		if err != nil {
+			return
+		}
+		s.SetIOflags(uint32(val))
+	}
+	cflags, ok := values["cflags"]
+	if ok {
+		val, err = strconv.ParseUint(cflags[0], 0, 64)
+		if err != nil {
+			return
+		}
+		s.SetCflags(val)
+	}
+	trace, ok := values["trace_id"]
+	if ok {
+		val, err = strconv.ParseUint(trace[0], 0, 64)
+		if err != nil {
+			return
+		}
+		s.SetTraceID(val)
 	}
 
 	return
