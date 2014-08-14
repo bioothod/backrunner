@@ -244,7 +244,7 @@ func (bctl *BucketCtl) Upload(key string, req *http.Request) (reply map[string]i
 	sgroups = make([]uint32, 0)
 
 
-	for l := range s.WriteData(key, string(data)) {
+	for l := range s.WriteData(key, data) {
 		ret := make(map[string]interface{})
 		if l.Error() != nil {
 			egroups = append(egroups, l.Cmd().ID.Group)
@@ -321,7 +321,7 @@ func (bctl *BucketCtl) Get(bname, key string, req *http.Request) (resp []byte, e
 			return
 		}
 
-		resp = []byte(rd.Data())
+		resp = rd.Data()
 	}
 	return
 }
