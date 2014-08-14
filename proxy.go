@@ -18,10 +18,11 @@ import (
 var (
 	proxy bproxy
 
-	upload_prefix	= "/upload/"
-	get_prefix	= "/get/"
-	ping_prefix	= "/ping/"
-	IdleTimeout	= 5 * time.Second
+	nobucket_upload_prefix	= "/nobucket_upload/"
+	bucket_upload_prefix	= "/upload/"
+	get_prefix		= "/get/"
+	ping_prefix		= "/ping/"
+	IdleTimeout		= 5 * time.Second
 )
 
 type bproxy struct {
@@ -38,13 +39,7 @@ func (p *bproxy) local_url(key, bucket, operation string) string {
 	return fmt.Sprintf("http://%s/%s/%s/%s", p.host, operation, bucket, key)
 }
 
-func upload_handler(w http.ResponseWriter, req *http.Request, key string) {
-	resp, bucket, err := proxy.bctl.Upload(key, req)
-	if err != nil {
-		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
-		return
-	}
-
+func (p *bproxy) send_upload_reply(w http.ResponseWriter, req *http.Request, bucket *bucket.Bucket, key string, resp map[string]interface{}) {
 	type ent_reply struct {
 		Get    string `json:"get"`
 		Update string `json:"update"`
@@ -79,6 +74,17 @@ func upload_handler(w http.ResponseWriter, req *http.Request, key string) {
 	w.Write(reply_json)
 }
 
+func upload_handler(w http.ResponseWriter, req *http.Request, key string) {
+	resp, bucket, err := proxy.bctl.Upload(key, req)
+	if err != nil {
+		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
+		return
+	}
+
+	proxy.send_upload_reply(w, req, bucket, key, resp)
+	return
+}
+
 func ping_handler(w http.ResponseWriter, r *http.Request) {
 	message := "Ping OK"
 
@@ -98,12 +104,18 @@ func ping_handler(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, message, http.StatusOK)
 }
 
-func get_handler(w http.ResponseWriter, req *http.Request, path string) {
-	kbstrings := strings.SplitN(path, "/", 2)
+func bucket_upload_handler(w http.ResponseWriter, req *http.Request, bucket, key string) {
+	resp, b, err := proxy.bctl.BucketUpload(bucket, key, req)
+	if err != nil {
+		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
+		return
+	}
 
-	bucket := kbstrings[0]
-	key := kbstrings[1]
+	proxy.send_upload_reply(w, req, b, key, resp)
+	return
+}
 
+func get_handler(w http.ResponseWriter, req *http.Request, bucket, key string) {
 	resp, err := proxy.bctl.Get(bucket, key, req)
 	if err != nil {
 		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
@@ -120,13 +132,25 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if strings.HasPrefix(req.URL.Path, upload_prefix) {
-		upload_handler(w, req, Key(req, upload_prefix))
+	kbstrings := strings.SplitN(req.URL.Path, "/", 2)
+	handler := kbstrings[0]
+	key := kbstrings[1]
+
+	if handler == nobucket_upload_prefix {
+		upload_handler(w, req, key)
 		return
 	}
 
-	if strings.HasPrefix(req.URL.Path, get_prefix) {
-		get_handler(w, req, Key(req, get_prefix))
+	bucket := kbstrings[1]
+	key = kbstrings[2]
+
+	if handler == bucket_upload_prefix {
+		bucket_upload_handler(w, req, bucket, key)
+		return
+	}
+
+	if handler == get_prefix {
+		get_handler(w, req, bucket, key)
 		return
 	}
 

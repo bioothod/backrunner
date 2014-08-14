@@ -129,6 +129,21 @@ type BucketCtl struct {
 	Bucket	[]*Bucket
 }
 
+func (bctl *BucketCtl) FindBucket(name string) (bucket *Bucket, err error) {
+	for i := range bctl.Bucket {
+		b := bctl.Bucket[i]
+		if b.Name == name {
+			bucket = b
+			err = nil
+			return
+		}
+	}
+
+	bucket = nil
+	err = fmt.Errorf("%s: could not find bucket", name)
+	return
+}
+
 func (bctl *BucketCtl) GetBucket() (bucket *Bucket) {
 	sum := 0.0
 	for i := range bctl.Bucket {
@@ -208,9 +223,7 @@ func (b *Bucket) check_auth(r *http.Request) (err error) {
 	return
 }
 
-func (bctl *BucketCtl) Upload(key string, req *http.Request) (reply map[string]interface{}, bucket *Bucket, err error) {
-	bucket = bctl.GetBucket()
-
+func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Request) (reply map[string]interface{}, err error) {
 	err = bucket.check_auth(req)
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), errors.ErrorStatus(err),
@@ -270,6 +283,24 @@ func (bctl *BucketCtl) Upload(key string, req *http.Request) (reply map[string]i
 	reply["success-groups"] = sgroups
 	reply["error-groups"] = egroups
 
+	return
+}
+
+func (bctl *BucketCtl) Upload(key string, req *http.Request) (reply map[string]interface{}, bucket *Bucket, err error) {
+	bucket = bctl.GetBucket()
+
+	reply, err = bctl.bucket_upload(bucket, key, req)
+	return
+}
+
+func (bctl *BucketCtl) BucketUpload(bucket_name, key string, req *http.Request) (reply map[string]interface{}, bucket *Bucket, err error) {
+	bucket, err = bctl.FindBucket(bucket_name)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, err.Error())
+		return
+	}
+
+	reply, err = bctl.bucket_upload(bucket, key, req)
 	return
 }
 
