@@ -305,19 +305,9 @@ func (bctl *BucketCtl) BucketUpload(bucket_name, key string, req *http.Request) 
 }
 
 func (bctl *BucketCtl) Get(bname, key string, req *http.Request) (resp []byte, err error) {
-	var bucket *Bucket = nil
-	ok := false
-
-	for _, bucket = range bctl.Bucket {
-		if bucket.Name == bname {
-			ok = true
-			break
-		}
-	}
-
-	if !ok {
-		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
-			fmt.Sprintf("get: could not find bucket '%s'", bname))
+	bucket, err = bctl.FindBucket(bname)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -332,6 +322,49 @@ func (bctl *BucketCtl) Get(bname, key string, req *http.Request) (resp []byte, e
 	s.SetGroups(bucket.meta.groups)
 
 	for rd := range s.ReadData(key) {
+		if rd.Error() != nil {
+			err = rd.Error()
+
+			code := elliptics.ErrorStatus(err)
+			message := elliptics.ErrorData(err)
+			status := http.StatusBadRequest
+
+			switch syscall.Errno(-code) {
+			case syscall.ENXIO:
+				status = http.StatusServiceUnavailable
+			case syscall.ENOENT:
+				status = http.StatusNotFound
+			}
+
+			err = errors.NewKeyError(req.URL.String(), status,
+				fmt.Sprintf("get: could not read data: elliptics-code: %d, elliptics-message: %s",
+					code, message))
+			return
+		}
+
+		resp = rd.Data()
+	}
+	return
+}
+
+func (bctl *BucketCtl) Lookup(bname, key string, req *http.Request) (resp []byte, err error) {
+	bucket, err = bctl.FindBucket(bname)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, err.Error())
+		return
+	}
+
+	s, err := bctl.e.DataSession(req)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
+			fmt.Sprintf("get: could not create data session: %v", err))
+		return
+	}
+
+	s.SetNamespace(bucket.Name)
+	s.SetGroups(bucket.meta.groups)
+
+	for rd := range s.ParallelLookup(key) {
 		if rd.Error() != nil {
 			err = rd.Error()
 
