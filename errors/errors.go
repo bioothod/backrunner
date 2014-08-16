@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/bioothod/elliptics-go/elliptics"
 	"log"
+	"net/http"
 	"syscall"
 )
 
@@ -56,7 +57,7 @@ func NewKeyErrorFromEllipticsError(ellerr error, url, message string) (err *KeyE
 		status = http.StatusNotFound
 	}
 
-	err = errors.NewKeyError(url, status,
+	err = NewKeyError(url, status,
 		fmt.Sprintf("%s: elliptics-code: %d, elliptics-message: %s",
 			message, err_code, err_message))
 	return
