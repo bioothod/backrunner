@@ -2,7 +2,9 @@ package errors
 
 import (
 	"fmt"
+	"github.com/bioothod/elliptics-go/elliptics"
 	"log"
+	"syscall"
 )
 
 type KeyError struct {
@@ -39,5 +41,23 @@ func NewKeyError(url string, status int, data string) (err *KeyError) {
 		data:   data,
 	}
 	log.Printf("%v\n", err.Error())
+	return
+}
+
+func NewKeyErrorFromEllipticsError(ellerr error, url, message string) (err *KeyError) {
+	err_code := elliptics.ErrorStatus(ellerr)
+	err_message := elliptics.ErrorData(ellerr)
+	status := http.StatusBadRequest
+
+	switch syscall.Errno(-err_code) {
+	case syscall.ENXIO:
+		status = http.StatusServiceUnavailable
+	case syscall.ENOENT:
+		status = http.StatusNotFound
+	}
+
+	err = errors.NewKeyError(url, status,
+		fmt.Sprintf("%s: elliptics-code: %d, elliptics-message: %s",
+			message, err_code, err_message))
 	return
 }

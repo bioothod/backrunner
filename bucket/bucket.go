@@ -323,22 +323,7 @@ func (bctl *BucketCtl) Get(bname, key string, req *http.Request) (resp []byte, e
 
 	for rd := range s.ReadData(key) {
 		if rd.Error() != nil {
-			err = rd.Error()
-
-			code := elliptics.ErrorStatus(err)
-			message := elliptics.ErrorData(err)
-			status := http.StatusBadRequest
-
-			switch syscall.Errno(-code) {
-			case syscall.ENXIO:
-				status = http.StatusServiceUnavailable
-			case syscall.ENOENT:
-				status = http.StatusNotFound
-			}
-
-			err = errors.NewKeyError(req.URL.String(), status,
-				fmt.Sprintf("get: could not read data: elliptics-code: %d, elliptics-message: %s",
-					code, message))
+			err = errors.NewKeyErrorFromEllipticsError(rd.Error(), req.URL.String(), "get: could not read data")
 			return
 		}
 
@@ -357,7 +342,7 @@ func (bctl *BucketCtl) Lookup(bname, key string, req *http.Request) (resp []byte
 	s, err := bctl.e.DataSession(req)
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
-			fmt.Sprintf("get: could not create data session: %v", err))
+			fmt.Sprintf("lookup: could not create data session: %v", err))
 		return
 	}
 
@@ -366,22 +351,7 @@ func (bctl *BucketCtl) Lookup(bname, key string, req *http.Request) (resp []byte
 
 	for rd := range s.ParallelLookup(key) {
 		if rd.Error() != nil {
-			err = rd.Error()
-
-			code := elliptics.ErrorStatus(err)
-			message := elliptics.ErrorData(err)
-			status := http.StatusBadRequest
-
-			switch syscall.Errno(-code) {
-			case syscall.ENXIO:
-				status = http.StatusServiceUnavailable
-			case syscall.ENOENT:
-				status = http.StatusNotFound
-			}
-
-			err = errors.NewKeyError(req.URL.String(), status,
-				fmt.Sprintf("get: could not read data: elliptics-code: %d, elliptics-message: %s",
-					code, message))
+			err = errors.NewKeyErrorFromEllipticsError(rd.Error(), req.URL.String(), "lookup: could not find key")
 			return
 		}
 
