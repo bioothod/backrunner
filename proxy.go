@@ -21,6 +21,7 @@ var (
 	nobucket_upload_prefix	= "/nobucket_upload/"
 	bucket_upload_prefix	= "/upload/"
 	get_prefix		= "/get/"
+	lookup_prefix		= "/lookup/"
 	ping_prefix		= "/ping/"
 	IdleTimeout		= 5 * time.Second
 )
@@ -126,6 +127,17 @@ func get_handler(w http.ResponseWriter, req *http.Request, bucket, key string) {
 	w.Write(resp)
 }
 
+func lookup_handler(w http.ResponseWriter, req *http.Request, bucket, key string) {
+	resp, err := proxy.bctl.Lookup(bucket, key, req)
+	if err != nil {
+		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(resp)
+}
+
 func generic_handler(w http.ResponseWriter, req *http.Request) {
 	if strings.HasPrefix(req.URL.Path, ping_prefix) {
 		ping_handler(w, req)
@@ -144,18 +156,17 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 	bucket := kbstrings[1]
 	key = kbstrings[2]
 
-	if handler == bucket_upload_prefix {
+	switch handler {
+	case bucket_upload_prefix:
 		bucket_upload_handler(w, req, bucket, key)
-		return
-	}
-
-	if handler == get_prefix {
+	case get_prefix:
 		get_handler(w, req, bucket, key)
-		return
+	case lookup_prefix:
+		lookup_handler(w, req, bucket, key)
+	default:
+		http.Error(w, fmt.Sprintf("url: %s: there is no registered handler for this path", req.URL.Path),
+			http.StatusBadRequest)
 	}
-
-	http.Error(w, fmt.Sprintf("url: %s: there is no registered handler for this path", req.URL.Path),
-		http.StatusBadRequest)
 }
 
 func getTimeoutServer(addr string, handler http.Handler) *http.Server {
