@@ -104,8 +104,7 @@ func NewEllipticsTransport(config_file string) (e *Elliptics, err error) {
 
 	e.log = log.New(e.log_file, prefix, log.LstdFlags | log.Lmicroseconds)
 
-
-	e.node, err = elliptics.NewNodeLog(unsafe.Pointer(&GoLogVar), unsafe.Pointer(e), int(conf["log-level"].(float64)))
+	e.node, err = elliptics.NewNode(e.log, conf["log-level"].(string))
 	if err != nil {
 		log.Fatal(err)
 	}

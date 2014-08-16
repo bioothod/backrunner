@@ -128,14 +128,21 @@ func get_handler(w http.ResponseWriter, req *http.Request, bucket, key string) {
 }
 
 func lookup_handler(w http.ResponseWriter, req *http.Request, bucket, key string) {
-	resp, err := proxy.bctl.Lookup(bucket, key, req)
+	reply, err := proxy.bctl.Lookup(bucket, key, req)
 	if err != nil {
 		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
 		return
 	}
 
+	reply_json, err := json.Marshal(reply)
+	if err != nil {
+		log.Printf("url: %s: lookup: json marshal failed: %q\n", req.URL, err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	w.WriteHeader(http.StatusOK)
-	w.Write(resp)
+	w.Write(reply_json)
 }
 
 func generic_handler(w http.ResponseWriter, req *http.Request) {

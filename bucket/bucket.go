@@ -14,7 +14,6 @@ import (
 	"math/rand"
 	"net/http"
 	"strings"
-	"syscall"
 	"sync/atomic"
 	"time"
 )
@@ -223,6 +222,43 @@ func (b *Bucket) check_auth(r *http.Request) (err error) {
 	return
 }
 
+func bucket_lookup_serialize(ch <-chan elliptics.Lookuper) (map[string]interface{}, error) {
+	var info []interface{}
+	var egroups, sgroups []uint32
+
+	egroups = make([]uint32, 0)
+	sgroups = make([]uint32, 0)
+
+	for l := range ch {
+		ret := make(map[string]interface{})
+		if l.Error() != nil {
+			egroups = append(egroups, l.Cmd().ID.Group)
+
+			ret["error"] = fmt.Sprintf("%v", l.Error())
+		} else {
+			sgroups = append(sgroups, l.Cmd().ID.Group)
+
+			ret["id"] = hex.EncodeToString(l.Cmd().ID.ID)
+			ret["csum"] = hex.EncodeToString(l.Info().Csum)
+			ret["filename"] = l.Path()
+			ret["size"] = l.Info().Size
+			ret["offset-within-data-file"] = l.Info().Offset
+			ret["mtime"] = l.Info().Mtime.String()
+			ret["server"] = l.StorageAddr().String()
+		}
+
+
+		info = append(info, ret)
+	}
+
+	reply := make(map[string]interface{})
+	reply["info"] = info
+	reply["success-groups"] = sgroups
+	reply["error-groups"] = egroups
+
+	return reply, nil
+}
+
 func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Request) (reply map[string]interface{}, err error) {
 	err = bucket.check_auth(req)
 	if err != nil {
@@ -249,40 +285,7 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.meta.groups)
 
-
-	var info []interface{}
-	var egroups, sgroups []uint32
-
-	egroups = make([]uint32, 0)
-	sgroups = make([]uint32, 0)
-
-
-	for l := range s.WriteData(key, data) {
-		ret := make(map[string]interface{})
-		if l.Error() != nil {
-			egroups = append(egroups, l.Cmd().ID.Group)
-
-			ret["error"] = fmt.Sprintf("%v", l.Error())
-		} else {
-			sgroups = append(sgroups, l.Cmd().ID.Group)
-
-			ret["id"] = hex.EncodeToString(l.Cmd().ID.ID)
-			ret["csum"] = hex.EncodeToString(l.Info().Csum)
-			ret["filename"] = l.Path()
-			ret["size"] = l.Info().Size
-			ret["offset-within-data-file"] = l.Info().Offset
-			ret["mtime"] = l.Info().Mtime.String()
-			ret["server"] = l.StorageAddr().String()
-		}
-
-		info = append(info, ret)
-	}
-
-	reply = make(map[string]interface{})
-	reply["info"] = info
-	reply["success-groups"] = sgroups
-	reply["error-groups"] = egroups
-
+	reply, err = bucket_lookup_serialize(s.WriteData(key, data))
 	return
 }
 
@@ -305,7 +308,7 @@ func (bctl *BucketCtl) BucketUpload(bucket_name, key string, req *http.Request) 
 }
 
 func (bctl *BucketCtl) Get(bname, key string, req *http.Request) (resp []byte, err error) {
-	bucket, err = bctl.FindBucket(bname)
+	bucket, err := bctl.FindBucket(bname)
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, err.Error())
 		return
@@ -332,8 +335,8 @@ func (bctl *BucketCtl) Get(bname, key string, req *http.Request) (resp []byte, e
 	return
 }
 
-func (bctl *BucketCtl) Lookup(bname, key string, req *http.Request) (resp []byte, err error) {
-	bucket, err = bctl.FindBucket(bname)
+func (bctl *BucketCtl) Lookup(bname, key string, req *http.Request) (reply map[string]interface{}, err error) {
+	bucket, err := bctl.FindBucket(bname)
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, err.Error())
 		return
@@ -349,14 +352,7 @@ func (bctl *BucketCtl) Lookup(bname, key string, req *http.Request) (resp []byte
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.meta.groups)
 
-	for rd := range s.ParallelLookup(key) {
-		if rd.Error() != nil {
-			err = errors.NewKeyErrorFromEllipticsError(rd.Error(), req.URL.String(), "lookup: could not find key")
-			return
-		}
-
-		resp = rd.Data()
-	}
+	reply, err = bucket_lookup_serialize(s.ParallelLookup(key))
 	return
 }
 
