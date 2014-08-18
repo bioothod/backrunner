@@ -14,7 +14,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"unsafe"
+	//"unsafe"
 )
 
 type Elliptics struct {
