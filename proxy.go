@@ -117,6 +117,8 @@ func ping_handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func generic_handler(w http.ResponseWriter, req *http.Request) {
+	defer req.Body.Close()
+
 	if strings.HasPrefix(req.URL.Path, ping_prefix) {
 		ping_handler(w, req)
 		return
