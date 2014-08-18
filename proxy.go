@@ -48,8 +48,16 @@ func upload_handler(w http.ResponseWriter, http_req *http.Request) {
 	}
 
 	resp, err := proxy.transport.Upload(&req)
+	if err != nil {
+		log.Printf("url: %s: transport1 error: %q", http_req.URL, err)
+		req.Bucket.HalfRate()
+
+		http.Error(w, err.Error(), resp.Status)
+		return
+	}
+
 	if resp.Status != http.StatusOK {
-		log.Printf("url: %s: transport error: %d", http_req.URL, resp.Status)
+		log.Printf("url: %s: transport2 error: %d", http_req.URL, resp.Status)
 		req.Bucket.HalfRate()
 
 		err = errors.NewKeyError(http_req.URL.String(), resp.Status, string(resp.Data))

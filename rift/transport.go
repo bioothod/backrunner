@@ -23,11 +23,15 @@ func (r *Rift) generate_url(key, bucket, operation string) string {
 }
 
 func (r *Rift) Upload(req *transport.Request) (resp *transport.Response, err error) {
+	resp = &transport.Response {
+	}
+
 	http_req := req.Http
 	defer http_req.Body.Close()
 
 	http_req.URL, err = url.Parse(r.generate_url(req.Key, req.Bucket.Name, "upload"))
 	if err != nil {
+		resp.Status = http_resp.StatusBadRequest
 		err = errors.NewKeyError(http_req.URL.String(), http.StatusBadRequest,
 				fmt.Sprintf("could not parse generated URL: %q", err))
 		return
@@ -35,6 +39,7 @@ func (r *Rift) Upload(req *transport.Request) (resp *transport.Response, err err
 
 	sign, err := req.Bctl.GenAuthHeader(req.User, http_req)
 	if err != nil {
+		resp.Status = http_resp.StatusBadRequest
 		err = errors.NewKeyError(http_req.URL.String(), http.StatusBadRequest,
 				fmt.Sprintf("could not generate signature: user: %s: %q",
 					req.User, err))
@@ -46,6 +51,7 @@ func (r *Rift) Upload(req *transport.Request) (resp *transport.Response, err err
 	http_req.RequestURI = ""
 	http_resp, err := r.client.Do(http_req)
 	if err != nil {
+		resp.Status = http_resp.StatusServiceUnavailable
 		err = errors.NewKeyError(http_req.URL.String(), http.StatusServiceUnavailable,
 				fmt.Sprintf("post failed: %q", err))
 		return
@@ -55,6 +61,7 @@ func (r *Rift) Upload(req *transport.Request) (resp *transport.Response, err err
 	resp.Status = http_resp.StatusCode
 	resp.Data, err = ioutil.ReadAll(http_resp.Body)
 	if err != nil {
+		resp.Status = http_resp.StatusServiceUnavailable
 		err = errors.NewKeyError(http_req.URL.String(), http.StatusServiceUnavailable,
 				fmt.Sprintf("failed to read back response data: %q", err))
 		return
