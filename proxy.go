@@ -151,12 +151,18 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	kbstrings := strings.SplitN(req.URL.Path, "/", 2)
+	kbstrings := strings.SplitN(req.URL.Path, "/", 3)
 	handler := kbstrings[0]
 	key := kbstrings[1]
 
 	if handler == nobucket_upload_prefix {
 		upload_handler(w, req, key)
+		return
+	}
+
+	if len(kbstrings) < 3 {
+		err := errors.NewKeyError(req.URL.String(), "could not split path to /handler/bucket/key", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
