@@ -17,12 +17,6 @@ import (
 
 var (
 	proxy bproxy
-
-	nobucket_upload_prefix	= "nobucket_upload"
-	bucket_upload_prefix	= "upload"
-	get_prefix		= "get"
-	lookup_prefix		= "lookup"
-	ping_prefix		= "ping"
 	IdleTimeout		= 5 * time.Second
 )
 
@@ -32,8 +26,23 @@ type bproxy struct {
 	ell		*etransport.Elliptics
 }
 
-func Key(req *http.Request, prefix string) string {
-	return req.URL.Path[len(prefix):]
+func ping_handler(w http.ResponseWriter, r *http.Request, strings ...string) {
+	message := "Ping OK"
+
+	buckets := make([]interface{}, 0)
+
+	for i := range proxy.bctl.Bucket {
+		b := &proxy.bctl.Bucket[i]
+		buckets = append(buckets, b)
+	}
+
+	j, err := json.Marshal(buckets)
+	if err == nil {
+		message = string(j)
+	} else {
+		message = fmt.Sprintf("marshaling error: %v", err)
+	}
+	http.Error(w, message, http.StatusOK)
 }
 
 func (p *bproxy) local_url(key, bucket, operation string) string {
@@ -75,7 +84,9 @@ func (p *bproxy) send_upload_reply(w http.ResponseWriter, req *http.Request, buc
 	w.Write(reply_json)
 }
 
-func upload_handler(w http.ResponseWriter, req *http.Request, key string) {
+func nobucket_upload_handler(w http.ResponseWriter, req *http.Request, strings ...string) {
+	key := strings[0]
+
 	resp, bucket, err := proxy.bctl.Upload(key, req)
 	if err != nil {
 		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
@@ -86,26 +97,10 @@ func upload_handler(w http.ResponseWriter, req *http.Request, key string) {
 	return
 }
 
-func ping_handler(w http.ResponseWriter, r *http.Request) {
-	message := "Ping OK"
+func bucket_upload_handler(w http.ResponseWriter, req *http.Request, strings ...string) {
+	bucket := strings[0]
+	key := strings[1]
 
-	buckets := make([]interface{}, 0)
-
-	for i := range proxy.bctl.Bucket {
-		b := &proxy.bctl.Bucket[i]
-		buckets = append(buckets, b)
-	}
-
-	j, err := json.Marshal(buckets)
-	if err == nil {
-		message = string(j)
-	} else {
-		message = fmt.Sprintf("marshaling error: %v", err)
-	}
-	http.Error(w, message, http.StatusOK)
-}
-
-func bucket_upload_handler(w http.ResponseWriter, req *http.Request, bucket, key string) {
 	resp, b, err := proxy.bctl.BucketUpload(bucket, key, req)
 	if err != nil {
 		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
@@ -116,7 +111,10 @@ func bucket_upload_handler(w http.ResponseWriter, req *http.Request, bucket, key
 	return
 }
 
-func get_handler(w http.ResponseWriter, req *http.Request, bucket, key string) {
+func get_handler(w http.ResponseWriter, req *http.Request, strings ...string) {
+	bucket := strings[0]
+	key := strings[1]
+
 	resp, err := proxy.bctl.Get(bucket, key, req)
 	if err != nil {
 		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
@@ -127,7 +125,10 @@ func get_handler(w http.ResponseWriter, req *http.Request, bucket, key string) {
 	w.Write(resp)
 }
 
-func lookup_handler(w http.ResponseWriter, req *http.Request, bucket, key string) {
+func lookup_handler(w http.ResponseWriter, req *http.Request, strings ...string) {
+	bucket := strings[0]
+	key := strings[1]
+
 	reply, err := proxy.bctl.Lookup(bucket, key, req)
 	if err != nil {
 		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
@@ -145,54 +146,49 @@ func lookup_handler(w http.ResponseWriter, req *http.Request, bucket, key string
 	w.Write(reply_json)
 }
 
+type handler struct {
+	params			int
+	function		func(w http.ResponseWriter, req *http.Request, v...string)
+}
+
+var proxy_handlers = map[string]handler {
+	"/nobucket_upload/" : {
+		params:	1,
+		function: nobucket_upload_handler,
+	},
+	"/upload/" : {
+		params: 2,
+		function: nobucket_upload_handler,
+	},
+	"/get/" : {
+		params: 2,
+		function: get_handler,
+	},
+	"/lookup/" : {
+		params: 2,
+		function: lookup_handler,
+	},
+	"/ping/" : {
+		params: 0,
+		function: ping_handler,
+	},
+}
+
 func generic_handler(w http.ResponseWriter, req *http.Request) {
-	kbstrings := strings.SplitN(req.URL.Path, "/", 3)
-	if len(kbstrings) < 1 {
-		err := errors.NewKeyError(req.URL.String(), http.StatusBadRequest, "could not split path to /handler, there must be at least 1 slash")
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	handler := kbstrings[1]
+	for k, v := range proxy_handlers {
+		if (strings.HasPrefix(req.URL.Path, k)) {
+			path := req.URL.Path[len(k):]
+			tmp := strings.SplitN(path, "/", v.params)
 
-	switch handler {
-	case ping_prefix:
-		ping_handler(w, req)
-		return
+			if len(tmp) >= v.params {
+				v.function(w, req, tmp...)
+				return
+			}
+		}
 	}
 
-	if len(kbstrings) < 2 {
-		err := errors.NewKeyError(req.URL.String(), http.StatusBadRequest, "could not split path to /handler/key, there must be at least 2 slashes")
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	key := kbstrings[2]
-
-	switch handler {
-	case nobucket_upload_prefix:
-		upload_handler(w, req, key)
-	}
-
-	kbstrings = strings.SplitN(req.URL.Path, "/", 4)
-	if len(kbstrings) < 3 {
-		err := errors.NewKeyError(req.URL.String(), http.StatusBadRequest, "could not split path to /handler/bucket/key, there must be at least 3 slashes")
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	bucket := kbstrings[2]
-	key = kbstrings[3]
-
-	switch handler {
-	case bucket_upload_prefix:
-		bucket_upload_handler(w, req, bucket, key)
-	case get_prefix:
-		get_handler(w, req, bucket, key)
-	case lookup_prefix:
-		lookup_handler(w, req, bucket, key)
-	default:
-		err := errors.NewKeyError(req.URL.String(), http.StatusBadRequest, "there is no registered handler for this path")
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	}
+	err := errors.NewKeyError(req.URL.String(), http.StatusBadRequest, "there is no registered handler for this path")
+	http.Error(w, err.Error(), http.StatusBadRequest)
 }
 
 func getTimeoutServer(addr string, handler http.Handler) *http.Server {
