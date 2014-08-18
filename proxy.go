@@ -30,7 +30,7 @@ type bproxy struct {
 }
 
 func (p *bproxy) local_url(key, bucket, operation string) string {
-	return fmt.Sprintf("http://%s/%s/%s/%s", p.host, operation, bucket, key)
+	return fmt.Sprintf("%s/%s/%s/%s", p.host, operation, bucket, key)
 }
 
 func upload_handler(w http.ResponseWriter, http_req *http.Request) {
