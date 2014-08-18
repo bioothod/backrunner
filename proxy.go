@@ -18,11 +18,11 @@ import (
 var (
 	proxy bproxy
 
-	nobucket_upload_prefix	= "/nobucket_upload/"
-	bucket_upload_prefix	= "/upload/"
-	get_prefix		= "/get/"
-	lookup_prefix		= "/lookup/"
-	ping_prefix		= "/ping/"
+	nobucket_upload_prefix	= "nobucket_upload"
+	bucket_upload_prefix	= "upload"
+	get_prefix		= "get"
+	lookup_prefix		= "lookup"
+	ping_prefix		= "ping"
 	IdleTimeout		= 5 * time.Second
 )
 
@@ -146,28 +146,41 @@ func lookup_handler(w http.ResponseWriter, req *http.Request, bucket, key string
 }
 
 func generic_handler(w http.ResponseWriter, req *http.Request) {
-	if strings.HasPrefix(req.URL.Path, ping_prefix) {
+	kbstrings := strings.SplitN(req.URL.Path, "/", 3)
+	if len(kbstrings) < 1 {
+		err := errors.NewKeyError(req.URL.String(), http.StatusBadRequest, "could not split path to /handler, there must be at least 1 slash")
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	handler := kbstrings[1]
+
+	switch handler {
+	case ping_prefix:
 		ping_handler(w, req)
 		return
 	}
 
-	kbstrings := strings.SplitN(req.URL.Path, "/", 3)
-	handler := kbstrings[0]
-	key := kbstrings[1]
-
-	if handler == nobucket_upload_prefix {
-		upload_handler(w, req, key)
+	if len(kbstrings) < 2 {
+		err := errors.NewKeyError(req.URL.String(), http.StatusBadRequest, "could not split path to /handler/key, there must be at least 2 slashes")
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	key := kbstrings[2]
 
+	switch handler {
+	case nobucket_upload_prefix:
+		upload_handler(w, req, key)
+	}
+
+	kbstrings = strings.SplitN(req.URL.Path, "/", 4)
 	if len(kbstrings) < 3 {
-		err := errors.NewKeyError(req.URL.String(), http.StatusBadRequest, "could not split path to /handler/bucket/key")
+		err := errors.NewKeyError(req.URL.String(), http.StatusBadRequest, "could not split path to /handler/bucket/key, there must be at least 3 slashes")
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	bucket := kbstrings[1]
-	key = kbstrings[2]
+	bucket := kbstrings[2]
+	key = kbstrings[3]
 
 	switch handler {
 	case bucket_upload_prefix:
@@ -177,8 +190,8 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 	case lookup_prefix:
 		lookup_handler(w, req, bucket, key)
 	default:
-		http.Error(w, fmt.Sprintf("url: %s: there is no registered handler for this path", req.URL.Path),
-			http.StatusBadRequest)
+		err := errors.NewKeyError(req.URL.String(), http.StatusBadRequest, "there is no registered handler for this path")
+		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
 }
 
