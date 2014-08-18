@@ -25,12 +25,6 @@ type Elliptics struct {
 	metadata_groups	[]int32
 }
 
-func GoLogFunc(priv unsafe.Pointer, level int, msg *C.char) {
-	e := (*Elliptics)(priv)
-	e.log.Printf("%d: %s", level, C.GoString(msg))
-}
-var GoLogVar = GoLogFunc
-
 func (e *Elliptics) MetadataSession() (ms *elliptics.Session, err error) {
 	ms, err = elliptics.NewSession(e.node)
 	if err != nil {
