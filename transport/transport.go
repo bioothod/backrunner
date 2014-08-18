@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-const DEFAULT_IDLE_TIMEOUT = 5 * time.Second
+const DEFAULT_IDLE_TIMEOUT = 50 * time.Second
 
 type Request struct {
 	Bctl	*bucket.BucketCtl
