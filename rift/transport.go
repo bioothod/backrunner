@@ -19,7 +19,7 @@ type Rift struct {
 }
 
 func (r *Rift) generate_url(key, bucket, operation string) string {
-	return fmt.Sprintf("http://%s/%s/%s/%s", r.remote[0], operation, bucket, key)
+	return fmt.Sprintf("%s/%s/%s/%s", r.remote[0], operation, bucket, key)
 }
 
 func (r *Rift) Upload(req *transport.Request) (resp *transport.Response, err error) {
