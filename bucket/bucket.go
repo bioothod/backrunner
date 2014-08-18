@@ -181,7 +181,7 @@ func (bctl *BucketCtl) ParseStat(data []byte) (err error) {
 		return err
 	}
 
-	log.Printf("%q\n", jdata)
+	//log.Printf("%q\n", jdata)
 	return nil
 }
 
