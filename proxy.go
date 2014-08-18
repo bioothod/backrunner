@@ -161,7 +161,7 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if len(kbstrings) < 3 {
-		err := errors.NewKeyError(req.URL.String(), "could not split path to /handler/bucket/key", http.StatusBadRequest)
+		err := errors.NewKeyError(req.URL.String(), http.StatusBadRequest, "could not split path to /handler/bucket/key")
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
