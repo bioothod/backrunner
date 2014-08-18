@@ -24,6 +24,7 @@ func (r *Rift) generate_url(key, bucket, operation string) string {
 
 func (r *Rift) Upload(req *transport.Request) (resp *transport.Response, err error) {
 	http_req := req.Http
+	defer http_req.Body.Close()
 
 	http_req.URL, err = url.Parse(r.generate_url(req.Key, req.Bucket.Name, "upload"))
 	if err != nil {
