@@ -91,7 +91,8 @@ func NewRiftTransport(remote []string) (r *Rift, err error) {
 				DisableKeepAlives:	false,
 				DisableCompression:	false,
 				Dial:			func (network, addr string) (net.Conn, error) {
-								return NewTimeoutConnDial(network, addr, transport.DEFAULT_IDLE_TIMEOUT)
+								return NewTimeoutConnDial(network, addr,
+									transport.DEFAULT_IDLE_TIMEOUT)
 							},
 			},
 		},
