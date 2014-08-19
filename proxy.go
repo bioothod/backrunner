@@ -236,9 +236,9 @@ func main() {
 
 	rand.Seed(9)
 
-	proxy.bctl, err = bucket.NewBucketCtl(*buckets, proxy.ell)
+	proxy.bctl, err = bucket.NewBucketCtl(proxy.ell, *buckets)
 	if err != nil {
-		log.Fatal("Could not process buckets file '"+*buckets+"'", err)
+		log.Fatalf("Could not process buckets file '%s': %v", *buckets, err)
 	}
 
 	proxy.host = "localhost"

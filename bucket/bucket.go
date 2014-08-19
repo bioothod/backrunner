@@ -22,77 +22,77 @@ import (
 const BucketNamespace string = "bucket"
 
 type BucketACL struct {
-	version int32
-	user    string
-	token   string
-	flags   uint64
+	Version int32
+	User    string
+	Token   string
+	Flags   uint64
 }
 
 type ExtractError struct {
-	reason string
-	out    []interface{}
+	Reason string
+	Out    []interface{}
 }
 
 func (err *ExtractError) Error() string {
-	return fmt.Sprintf("%s: %v", err.reason, err.out)
+	return fmt.Sprintf("%s: %v", err.Reason, err.Out)
 }
 
 type BucketMsgpack struct {
-	version     int32
-	bucket      string
-	acl         map[string]BucketACL
-	groups      []int32
-	flags       uint64
-	max_size    uint64
-	max_key_num uint64
+	Version     int32
+	Bucket      string
+	Acl         map[string]BucketACL
+	Groups      []int32
+	Flags       uint64
+	Max_size    uint64
+	Max_key_num uint64
 	reserved    [3]uint64
 }
 
 func (meta *BucketMsgpack) ExtractMsgpack(out []interface{}) (err error) {
 	if len(out) < 8 {
 		return &ExtractError{
-			reason: fmt.Sprintf("array length: %d, must be at least 8", len(out)),
-			out:    out,
+			Reason: fmt.Sprintf("array length: %d, must be at least 8", len(out)),
+			Out:    out,
 		}
 	}
-	meta.version = int32(out[0].(int64))
-	if meta.version != 1 {
+	meta.Version = int32(out[0].(int64))
+	if meta.Version != 1 {
 		return &ExtractError{
-			reason: fmt.Sprintf("unsupported metadata version %d", meta.version),
-			out:    out,
+			Reason: fmt.Sprintf("unsupported metadata version %d", meta.Version),
+			Out:    out,
 		}
 	}
-	meta.bucket = out[1].(string)
+	meta.Bucket = out[1].(string)
 
-	meta.acl = make(map[string]BucketACL)
+	meta.Acl = make(map[string]BucketACL)
 	for _, i := range out[2].(map[interface{}]interface{}) {
 		var acl BucketACL
 		x := i.([]interface{})
 
 		if v, ok := x[0].(int32); ok {
-			acl.version = v
+			acl.Version = v
 		}
 		if v, ok := x[1].(string); ok {
-			acl.user = v
+			acl.User = v
 		}
 		if v, ok := x[2].(string); ok {
-			acl.token = v
+			acl.Token = v
 		}
 		if v, ok := x[3].(uint64); ok {
-			acl.flags = v
+			acl.Flags = v
 		}
 
-		if len(acl.user) != 0 {
-			meta.acl[acl.user] = acl
+		if len(acl.User) != 0 {
+			meta.Acl[acl.User] = acl
 		}
 	}
 
 	for _, x := range out[3].([]interface{}) {
-		meta.groups = append(meta.groups, int32(x.(int64)))
+		meta.Groups = append(meta.Groups, int32(x.(int64)))
 	}
-	meta.flags = uint64(out[4].(int64))
-	meta.max_size = uint64(out[5].(int64))
-	meta.max_key_num = uint64(out[6].(int64))
+	meta.Flags = uint64(out[4].(int64))
+	meta.Max_size = uint64(out[5].(int64))
+	meta.Max_key_num = uint64(out[6].(int64))
 
 	return nil
 }
@@ -101,7 +101,7 @@ type Bucket struct {
 	Name	string
 	Backend	map[string]Backend
 
-	meta	BucketMsgpack
+	Meta	BucketMsgpack
 
 	Rate	float64
 	Packets int64
@@ -189,7 +189,7 @@ func (bucket *Bucket) HalfRate() {
 }
 
 func (b *Bucket) check_auth(r *http.Request) (err error) {
-	if len(b.meta.acl) == 0 {
+	if len(b.Meta.Acl) == 0 {
 		err = nil
 		return
 	}
@@ -199,14 +199,14 @@ func (b *Bucket) check_auth(r *http.Request) (err error) {
 		return
 	}
 
-	acl, ok := b.meta.acl[user]
+	acl, ok := b.Meta.Acl[user]
 	if !ok {
 		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
 			fmt.Sprintf("auth: there is no user '%s' in ACL", user))
 		return
 	}
 
-	calc_auth, err := auth.GenerateSignature(acl.token, r.Method, r.URL, r.Header)
+	calc_auth, err := auth.GenerateSignature(acl.Token, r.Method, r.URL, r.Header)
 	if err != nil {
 		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
 			fmt.Sprintf("auth: hmac generation failed: %s", err))
@@ -289,7 +289,7 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 	}
 
 	s.SetNamespace(bucket.Name)
-	s.SetGroups(bucket.meta.groups)
+	s.SetGroups(bucket.Meta.Groups)
 
 	reply, err = bucket_lookup_serialize(s.WriteData(key, req.Body, total_size))
 	return
@@ -328,7 +328,7 @@ func (bctl *BucketCtl) Get(bname, key string, req *http.Request) (resp []byte, e
 	}
 
 	s.SetNamespace(bucket.Name)
-	s.SetGroups(bucket.meta.groups)
+	s.SetGroups(bucket.Meta.Groups)
 
 	for rd := range s.ReadData(key) {
 		if rd.Error() != nil {
@@ -356,14 +356,14 @@ func (bctl *BucketCtl) Lookup(bname, key string, req *http.Request) (reply map[s
 	}
 
 	s.SetNamespace(bucket.Name)
-	s.SetGroups(bucket.meta.groups)
+	s.SetGroups(bucket.Meta.Groups)
 
 	reply, err = bucket_lookup_serialize(s.ParallelLookup(key))
 	return
 }
 
-func (bctl *BucketCtl) NewBucket(name string) (bucket *Bucket, err error) {
-	ms, err := bctl.e.MetadataSession()
+func NewBucket(ell *etransport.Elliptics, name string) (bucket *Bucket, err error) {
+	ms, err := ell.MetadataSession()
 	if err != nil {
 		log.Printf("%s: could not create metadata session: %v", name, err)
 		return
@@ -395,12 +395,12 @@ func (bctl *BucketCtl) NewBucket(name string) (bucket *Bucket, err error) {
 			return
 		}
 
-		err = b.meta.ExtractMsgpack(out)
+		err = b.Meta.ExtractMsgpack(out)
 		if err != nil {
 			log.Printf("%s: unsupported msgpack data:", name, err)
 		}
 
-		log.Printf("%s: groups: %v, acl: %v\n", b.Name, b.meta.groups, b.meta.acl)
+		log.Printf("%s: groups: %v, acl: %v\n", b.Name, b.Meta.Groups, b.Meta.Acl)
 		bucket = b
 		return
 	}
@@ -409,9 +409,9 @@ func (bctl *BucketCtl) NewBucket(name string) (bucket *Bucket, err error) {
 	return
 }
 
-func NewBucketCtl(bucket_path string, e *etransport.Elliptics) (bctl *BucketCtl, err error) {
+func NewBucketCtl(ell *etransport.Elliptics, bucket_path string) (bctl *BucketCtl, err error) {
 	bctl = &BucketCtl {
-		e:		e,
+		e:		ell,
 		Bucket:		make([]*Bucket, 0, 10),
 	}
 
@@ -422,7 +422,7 @@ func NewBucketCtl(bucket_path string, e *etransport.Elliptics) (bctl *BucketCtl,
 
 	for _, name := range strings.Split(string(data), "\n") {
 		if len(name) > 0 {
-			b, err := bctl.NewBucket(name)
+			b, err := NewBucket(bctl.e, name)
 			if err != nil {
 				continue
 			}
