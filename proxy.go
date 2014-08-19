@@ -17,7 +17,7 @@ import (
 
 var (
 	proxy bproxy
-	IdleTimeout		= 5 * time.Second
+	IdleTimeout		= 50 * time.Second
 )
 
 type bproxy struct {
