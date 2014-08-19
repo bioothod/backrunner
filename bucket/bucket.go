@@ -13,6 +13,7 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -267,13 +268,18 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 		return
 	}
 
-	data, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
-			fmt.Sprintf("upload: could not read data: %v", err))
+	lheader, ok := req.Header["Content-Length"]
+	if !ok {
+		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, "upload: there is no Content-Length header")
 		return
 	}
-	defer req.Body.Close()
+
+	total_size, err := strconv.ParseUint(lheader[0], 0, 64)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
+			fmt.Sprintf("upload: invalid content length conversion: %v", err))
+		return
+	}
 
 	s, err := bctl.e.DataSession(req)
 	if err != nil {
@@ -285,7 +291,7 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.meta.groups)
 
-	reply, err = bucket_lookup_serialize(s.WriteData(key, data))
+	reply, err = bucket_lookup_serialize(s.WriteData(key, req.Body, total_size))
 	return
 }
 
