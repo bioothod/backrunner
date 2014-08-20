@@ -354,15 +354,44 @@ func (bctl *BucketCtl) Get(bname, key string, req *http.Request) (resp []byte, e
 	s.SetGroups(bucket.Meta.Groups)
 
 	for rd := range s.ReadData(key, 0, 0) {
-		if rd.Error() != nil {
+		err = rd.Error()
+		if err != nil {
 			err = errors.NewKeyErrorFromEllipticsError(rd.Error(), req.URL.String(), "get: could not read data")
-			return
+			continue
 		}
 
 		resp = rd.Data()
+		return
 	}
 	return
 }
+
+func (bctl *BucketCtl) Stream(bname, key string, w http.ResponseWriter, req *http.Request) (err error) {
+	bucket, err := bctl.FindBucket(bname)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, err.Error())
+		return
+	}
+
+	s, err := bctl.e.DataSession(req)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
+			fmt.Sprintf("get: could not create data session: %v", err))
+		return
+	}
+
+	s.SetNamespace(bucket.Name)
+	s.SetGroups(bucket.Meta.Groups)
+
+	err = s.StreamHTTP(key, 0, 0, w)
+	if err != nil {
+		err = errors.NewKeyErrorFromEllipticsError(err, req.URL.String(), "get: could not read data")
+		return
+	}
+
+	return
+}
+
 
 func (bctl *BucketCtl) Lookup(bname, key string, req *http.Request) (reply map[string]interface{}, err error) {
 	bucket, err := bctl.FindBucket(bname)

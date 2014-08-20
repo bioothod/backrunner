@@ -115,14 +115,12 @@ func get_handler(w http.ResponseWriter, req *http.Request, strings ...string) {
 	bucket := strings[0]
 	key := strings[1]
 
-	resp, err := proxy.bctl.Get(bucket, key, req)
+	err := proxy.bctl.Stream(bucket, key, w, req)
 	if err != nil {
 		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
 		return
 	}
-
-	w.WriteHeader(http.StatusOK)
-	w.Write(resp)
+	return
 }
 
 func lookup_handler(w http.ResponseWriter, req *http.Request, strings ...string) {
