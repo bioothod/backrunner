@@ -314,7 +314,7 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.Meta.Groups)
 
-	reply, err = bucket_lookup_serialize(s.WriteData(key, req.Body, total_size))
+	reply, err = bucket_lookup_serialize(s.WriteData(key, req.Body, 0, total_size))
 	return
 }
 
@@ -353,7 +353,7 @@ func (bctl *BucketCtl) Get(bname, key string, req *http.Request) (resp []byte, e
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.Meta.Groups)
 
-	for rd := range s.ReadData(key) {
+	for rd := range s.ReadData(key, 0, 0) {
 		if rd.Error() != nil {
 			err = errors.NewKeyErrorFromEllipticsError(rd.Error(), req.URL.String(), "get: could not read data")
 			return
@@ -403,7 +403,7 @@ func ReadBucket(ell *etransport.Elliptics, name string) (bucket *Bucket, err err
 		Time:		time.Now(),
 	}
 
-	for rd := range ms.ReadData(name) {
+	for rd := range ms.ReadData(name, 0, 0) {
 		if rd.Error() != nil {
 			err = rd.Error()
 
@@ -454,7 +454,7 @@ func WriteBucket(ell *etransport.Elliptics, meta *BucketMsgpack) (bucket *Bucket
 		return
 	}
 
-	for wr := range ms.WriteData(meta.Name, bytes.NewReader(data), 0) {
+	for wr := range ms.WriteData(meta.Name, bytes.NewReader(data), 0, 0) {
 		if wr.Error() != nil {
 			err = wr.Error()
 
