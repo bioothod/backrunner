@@ -1,5 +1,5 @@
 {
-	"groups": [1],
+	"groups": [1,2],
 	"acl": [
 		{
 			"user": "*",
