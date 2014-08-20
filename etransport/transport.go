@@ -11,6 +11,7 @@ import (
 	//"github.com/vmihailenco/msgpack"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
@@ -44,30 +45,40 @@ func (e *Elliptics) DataSession(req *http.Request) (s *elliptics.Session, err er
 	values := req.URL.Query()
 	var val uint64
 
+	var trace_id uint64
+	trace, ok := req.Header["X-Request"]
+	if !ok {
+		trace_id = uint64(rand.Int63())
+	} else {
+		trace_id, err = strconv.ParseUint(trace[0], 0, 64)
+		if err != nil {
+			trace_id = uint64(rand.Int63())
+		}
+	}
+
 	ioflags, ok := values["ioflags"]
 	if ok {
 		val, err = strconv.ParseUint(ioflags[0], 0, 32)
-		if err != nil {
-			return
+		if err == nil {
+			s.SetIOflags(uint32(val))
 		}
-		s.SetIOflags(uint32(val))
 	}
 	cflags, ok := values["cflags"]
 	if ok {
 		val, err = strconv.ParseUint(cflags[0], 0, 64)
-		if err != nil {
-			return
+		if err == nil {
+			s.SetCflags(val)
 		}
-		s.SetCflags(val)
 	}
-	trace, ok := values["trace_id"]
+	trace, ok = values["trace_id"]
 	if ok {
-		val, err = strconv.ParseUint(trace[0], 0, 64)
+		trace_id, err = strconv.ParseUint(trace[0], 0, 64)
 		if err != nil {
-			return
+			trace_id = uint64(rand.Int63())
 		}
-		s.SetTraceID(val)
 	}
+
+	s.SetTraceID(trace_id)
 
 	return
 }
