@@ -1,6 +1,8 @@
 package bucket
 
 import (
+	"bytes"
+	"encoding/json"
 	"encoding/hex"
 	"github.com/bioothod/backrunner/auth"
 	"github.com/bioothod/backrunner/errors"
@@ -22,77 +24,98 @@ import (
 const BucketNamespace string = "bucket"
 
 type BucketACL struct {
-	Version int32
-	User    string
-	Token   string
-	Flags   uint64
-}
-
-type ExtractError struct {
-	Reason string
-	Out    []interface{}
-}
-
-func (err *ExtractError) Error() string {
-	return fmt.Sprintf("%s: %v", err.Reason, err.Out)
+	Version int32	`json:"-"`
+	User    string	`json:"user"`
+	Token   string	`json:"token"`
+	Flags   uint64	`json:"flags"`
 }
 
 type BucketMsgpack struct {
-	Version     int32
-	Bucket      string
-	Acl         map[string]BucketACL
-	Groups      []int32
-	Flags       uint64
-	Max_size    uint64
-	Max_key_num uint64
-	reserved    [3]uint64
+	Version     int32			`json:"-"`
+	Name        string			`json:"-"`
+	Acl         map[string]BucketACL	`json:"-"`
+	Groups      []int32			`json:"groups"`
+	Flags       uint64			`json:"flags"`
+	MaxSize     uint64			`json:"max-size"`
+	MaxKeyNum   uint64			`json:"max-key-num"`
+	reserved    [3]uint64			`json:"-"`
+}
+
+func (meta *BucketMsgpack) PackMsgpack() (interface{}, error) {
+	var out []interface{} = make([]interface{}, 7, 7)
+
+	out[0] = meta.Version
+	out[1] = meta.Name
+
+	var acls map[interface{}]interface{} = make(map[interface{}]interface{})
+	for _, acl := range meta.Acl {
+		var one_acl []interface{} = make([]interface{}, 4, 4)
+		one_acl[0] = acl.Version
+		one_acl[1] = acl.User
+		one_acl[2] = acl.Token
+		one_acl[3] = acl.Flags
+
+		acls[acl.User] = one_acl
+	}
+	out[2] = acls
+
+	var groups []interface{}
+	for _, g := range meta.Groups {
+		groups = append(groups, g)
+	}
+	out[3] = groups
+
+	out[4] = meta.Flags
+	out[5] = meta.MaxSize
+	out[6] = meta.MaxKeyNum
+
+	return out, nil
 }
 
 func (meta *BucketMsgpack) ExtractMsgpack(out []interface{}) (err error) {
-	if len(out) < 8 {
-		return &ExtractError{
-			Reason: fmt.Sprintf("array length: %d, must be at least 8", len(out)),
-			Out:    out,
-		}
+	if len(out) < 7 {
+		return fmt.Errorf("array length: %d, must be at least 7", len(out))
 	}
 	meta.Version = int32(out[0].(int64))
 	if meta.Version != 1 {
-		return &ExtractError{
-			Reason: fmt.Sprintf("unsupported metadata version %d", meta.Version),
-			Out:    out,
-		}
+		return fmt.Errorf("unsupported metadata version %d", meta.Version)
 	}
-	meta.Bucket = out[1].(string)
+	meta.Name = out[1].(string)
 
 	meta.Acl = make(map[string]BucketACL)
 	for _, i := range out[2].(map[interface{}]interface{}) {
-		var acl BucketACL
 		x := i.([]interface{})
-
-		if v, ok := x[0].(int32); ok {
-			acl.Version = v
+		var acl BucketACL
+		if v, ok := x[0].(int64); ok {
+			acl.Version = int32(v)
+		} else {
+			return fmt.Errorf("acl: could not find version")
 		}
 		if v, ok := x[1].(string); ok {
 			acl.User = v
+		} else {
+			return fmt.Errorf("acl: could not find user")
 		}
 		if v, ok := x[2].(string); ok {
 			acl.Token = v
+		} else {
+			return fmt.Errorf("acl: could not find token")
 		}
-		if v, ok := x[3].(uint64); ok {
-			acl.Flags = v
+		if v, ok := x[3].(int64); ok {
+			acl.Flags = uint64(v)
+		} else {
+			return fmt.Errorf("acl: could not find flags")
 		}
 
-		if len(acl.User) != 0 {
-			meta.Acl[acl.User] = acl
-		}
+		meta.Acl[acl.User] = acl
 	}
 
 	for _, x := range out[3].([]interface{}) {
 		meta.Groups = append(meta.Groups, int32(x.(int64)))
 	}
 	meta.Flags = uint64(out[4].(int64))
-	meta.Max_size = uint64(out[5].(int64))
-	meta.Max_key_num = uint64(out[6].(int64))
+	meta.MaxSize = uint64(out[5].(int64))
+	meta.MaxKeyNum = uint64(out[6].(int64))
 
 	return nil
 }
@@ -362,7 +385,7 @@ func (bctl *BucketCtl) Lookup(bname, key string, req *http.Request) (reply map[s
 	return
 }
 
-func NewBucket(ell *etransport.Elliptics, name string) (bucket *Bucket, err error) {
+func ReadBucket(ell *etransport.Elliptics, name string) (bucket *Bucket, err error) {
 	ms, err := ell.MetadataSession()
 	if err != nil {
 		log.Printf("%s: could not create metadata session: %v", name, err)
@@ -397,7 +420,8 @@ func NewBucket(ell *etransport.Elliptics, name string) (bucket *Bucket, err erro
 
 		err = b.Meta.ExtractMsgpack(out)
 		if err != nil {
-			log.Printf("%s: unsupported msgpack data:", name, err)
+			log.Printf("%s: unsupported msgpack data: %v", name, err)
+			return
 		}
 
 		log.Printf("%s: groups: %v, acl: %v\n", b.Name, b.Meta.Groups, b.Meta.Acl)
@@ -407,6 +431,108 @@ func NewBucket(ell *etransport.Elliptics, name string) (bucket *Bucket, err erro
 
 	err = errors.NewKeyError(name, http.StatusNotFound, "could not read bucket data: ReadData() returned nothing")
 	return
+}
+
+func WriteBucket(ell *etransport.Elliptics, meta *BucketMsgpack) (bucket *Bucket, err error) {
+	ms, err := ell.MetadataSession()
+	if err != nil {
+		log.Printf("%s: could not create metadata session: %v", meta.Name, err)
+		return
+	}
+
+	ms.SetNamespace(BucketNamespace)
+
+	out, err := meta.PackMsgpack()
+	if err != nil {
+		log.Printf("%s: could not pack bucket: %v", meta.Name, err)
+		return
+	}
+
+	data, err := msgpack.Marshal(&out)
+	if err != nil {
+		log.Printf("%s: could not parse bucket metadata: %v", meta.Name, err)
+		return
+	}
+
+	for wr := range ms.WriteData(meta.Name, bytes.NewReader(data), 0) {
+		if wr.Error() != nil {
+			err = wr.Error()
+
+			log.Printf("%s: could not write bucket metadata: %v", meta.Name, err)
+			return
+		}
+
+		bucket = &Bucket {
+			Meta:		*meta,
+			Name:		meta.Name,
+			Backend:	make(map[string]Backend),
+
+			Rate:		1024 * 1024 * 1024 * 100,
+			Packets:	0,
+			Time:		time.Now(),
+		}
+
+		return
+	}
+
+	err = errors.NewKeyError(meta.Name, http.StatusNotFound, "could not write bucket metadata: WriteData() returned nothing")
+	return
+}
+
+func WriteBucketJson(ell *etransport.Elliptics, name string, data []byte) (bucket *Bucket, err error) {
+	meta := BucketMsgpack {
+		Version:	1,
+		Name:		name,
+		Acl:		make(map[string]BucketACL),
+	}
+
+	// this can not create ACL map from array
+	err = json.Unmarshal(data, &meta)
+	if err != nil {
+		err = fmt.Errorf("could not parse data: %v", err)
+		return
+	}
+
+	var iface interface{}
+	err = json.Unmarshal(data, &iface)
+	if err != nil {
+		err = fmt.Errorf("could not parse data: %v", err)
+		return
+	}
+
+	imap := iface.(map[string]interface{})
+
+	log.Printf("acl: %v\n", imap["acl"])
+
+	for _, i := range imap["acl"].([]interface{}) {
+		acl := BucketACL {
+			Version: 1,
+		}
+
+		x := i.(map[string]interface{})
+		if v, ok := x["user"].(string); ok {
+			acl.User = v
+		} else {
+			err = fmt.Errorf("acl: could not find user")
+			return
+		}
+		if v, ok := x["token"].(string); ok {
+			acl.Token = v
+		} else {
+			err = fmt.Errorf("acl: could not find token")
+			return
+		}
+		if v, ok := x["flags"].(float64); ok {
+			acl.Flags = uint64(v)
+		} else {
+			err = fmt.Errorf("acl: could not find flags")
+			return
+		}
+
+		meta.Acl[acl.User] = acl
+	}
+
+	return WriteBucket(ell, &meta)
 }
 
 func NewBucketCtl(ell *etransport.Elliptics, bucket_path string) (bctl *BucketCtl, err error) {
@@ -422,7 +548,7 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path string) (bctl *BucketCt
 
 	for _, name := range strings.Split(string(data), "\n") {
 		if len(name) > 0 {
-			b, err := NewBucket(bctl.e, name)
+			b, err := ReadBucket(bctl.e, name)
 			if err != nil {
 				continue
 			}
