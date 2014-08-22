@@ -5,7 +5,7 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"fmt"
-	"github.com/bioothod/backrunner/errors"
+	//"github.com/bioothod/backrunner/errors"
 	"net/http"
 	"net/url"
 	"sort"
@@ -14,32 +14,26 @@ import (
 
 const AuthHeaderStr string = "Authorization"
 
+// GetAuthInfo() returns username and secure hmac
+// If there is any kind of error (there is no Authorization header, garbage in it and so on)
+// function returns wildcard '*' user and empty '' auth hmac.
 func GetAuthInfo(r *http.Request) (user, recv_auth string, err error) {
-	user = ""
+	user = "*"
 	recv_auth = ""
 	err = nil
 
 	auth_headers, ok := r.Header[AuthHeaderStr]
 	if !ok {
-		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
-			fmt.Sprintf("auth: there is no '%s' header",
-				AuthHeaderStr))
 		return
 	}
 
 	auth_data := strings.Split(auth_headers[0], " ")
 	if len(auth_data) != 2 {
-		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
-			fmt.Sprintf("auth: auth header1 '%s' must be 'riftv1 user:hmac'",
-				auth_headers[0]))
 		return
 	}
 
 	auth_data = strings.Split(auth_data[1], ":")
 	if len(auth_data) != 2 {
-		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
-			fmt.Sprintf("auth: auth header2 '%s' must be 'riftv1 user:hmac'",
-				auth_headers[0]))
 		return
 	}
 
