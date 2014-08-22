@@ -131,6 +131,13 @@ type Bucket struct {
 	Time    time.Time
 }
 
+const (
+	BucketAuthEmpty		uint64		= 0
+	BucketAuthNoToken	uint64		= 1
+	BucketAuthWrite		uint64		= 2
+	BucketAuthAdmin		uint64		= 4
+)
+
 type Backend struct {
 	Id	string // hostname in elliptics 2.25
 	Rate	float64
@@ -211,7 +218,7 @@ func (bucket *Bucket) HalfRate() {
 	bucket.Time = t
 }
 
-func (b *Bucket) check_auth(r *http.Request) (err error) {
+func (b *Bucket) check_auth(r *http.Request, flags uint64) (err error) {
 	if len(b.Meta.Acl) == 0 {
 		err = nil
 		return
@@ -225,21 +232,33 @@ func (b *Bucket) check_auth(r *http.Request) (err error) {
 	acl, ok := b.Meta.Acl[user]
 	if !ok {
 		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
-			fmt.Sprintf("auth: there is no user '%s' in ACL", user))
+			fmt.Sprintf("auth: header: '%v': there is no user '%s' in ACL",
+				r.Header[auth.AuthHeaderStr], user))
 		return
+	}
+
+	// only request flags check if its not 0
+	// 0 flags are set by reader, non 0 flags are supposed to mean modifications
+	if flags != 0 {
+		if (acl.Flags & flags) != 0 {
+			err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
+				fmt.Sprintf("auth: header: '%v': user '%s' is not allowed to do action: acl-flags: 0x%x, required-flags: 0x%x",
+					r.Header[auth.AuthHeaderStr], user, acl.Flags, flags))
+		}
 	}
 
 	calc_auth, err := auth.GenerateSignature(acl.Token, r.Method, r.URL, r.Header)
 	if err != nil {
 		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
-			fmt.Sprintf("auth: hmac generation failed: %s", err))
+			fmt.Sprintf("auth: header: '%v': hmac generation failed: %s",
+				r.Header[auth.AuthHeaderStr], user))
 		return
 	}
 
 	if recv_auth != calc_auth {
 		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
-			fmt.Sprintf("auth: hmac mismatch: recv: '%s', calc: '%s'",
-				recv_auth, calc_auth))
+			fmt.Sprintf("auth: header: '%v': hmac mismatch: recv: '%s', calc: '%s'",
+				r.Header[auth.AuthHeaderStr], user))
 		return
 	}
 
@@ -284,7 +303,7 @@ func bucket_lookup_serialize(ch <-chan elliptics.Lookuper) (map[string]interface
 }
 
 func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Request) (reply map[string]interface{}, err error) {
-	err = bucket.check_auth(req)
+	err = bucket.check_auth(req, BucketAuthWrite)
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), errors.ErrorStatus(err),
 			fmt.Sprintf("upload: %s", errors.ErrorData(err)))
@@ -340,6 +359,13 @@ func (bctl *BucketCtl) Get(bname, key string, req *http.Request) (resp []byte, e
 	bucket, err := bctl.FindBucket(bname)
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, err.Error())
+		return
+	}
+
+	err = bucket.check_auth(req, BucketAuthEmpty)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), errors.ErrorStatus(err),
+			fmt.Sprintf("upload: %s", errors.ErrorData(err)))
 		return
 	}
 
