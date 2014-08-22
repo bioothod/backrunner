@@ -156,7 +156,7 @@ var proxy_handlers = map[string]handler {
 	},
 	"/upload/" : {
 		params: 2,
-		function: nobucket_upload_handler,
+		function: upload_handler,
 	},
 	"/get/" : {
 		params: 2,
