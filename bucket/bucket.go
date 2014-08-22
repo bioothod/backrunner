@@ -218,7 +218,7 @@ func (bucket *Bucket) HalfRate() {
 	bucket.Time = t
 }
 
-func (b *Bucket) check_auth(r *http.Request, flags uint64) (err error) {
+func (b *Bucket) check_auth(r *http.Request, required_flags uint64) (err error) {
 	if len(b.Meta.Acl) == 0 {
 		err = nil
 		return
@@ -237,13 +237,18 @@ func (b *Bucket) check_auth(r *http.Request, flags uint64) (err error) {
 		return
 	}
 
-	// only request flags check if its not 0
-	// 0 flags are set by reader, non 0 flags are supposed to mean modifications
-	if flags != 0 {
-		if (acl.Flags & flags) != 0 {
+	// skip authorization if special ACL flag is set
+	if acl.Flags & BucketAuthNoToken {
+		return
+	}
+
+	// only require required_flags check if its not 0
+	// 0 required_flags are set by reader, non 0 required_flags are supposed to mean modifications
+	if required_flags != 0 {
+		if (acl.Flags & required_flags) != 0 {
 			err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
 				fmt.Sprintf("auth: header: '%v': user '%s' is not allowed to do action: acl-flags: 0x%x, required-flags: 0x%x",
-					r.Header[auth.AuthHeaderStr], user, acl.Flags, flags))
+					r.Header[auth.AuthHeaderStr], user, acl.Flags, required_flags))
 		}
 	}
 
