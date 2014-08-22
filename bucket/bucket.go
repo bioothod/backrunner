@@ -238,7 +238,7 @@ func (b *Bucket) check_auth(r *http.Request, required_flags uint64) (err error) 
 	}
 
 	// skip authorization if special ACL flag is set
-	if acl.Flags & BucketAuthNoToken {
+	if (acl.Flags & BucketAuthNoToken) != 0 {
 		return
 	}
 
