@@ -445,6 +445,30 @@ func (bctl *BucketCtl) Lookup(bname, key string, req *http.Request) (reply map[s
 	return
 }
 
+func (bctl *BucketCtl) Delete(bname, key string, req *http.Request) (err error) {
+	bucket, err := bctl.FindBucket(bname)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, err.Error())
+		return
+	}
+
+	s, err := bctl.e.DataSession(req)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
+			fmt.Sprintf("lookup: could not create data session: %v", err))
+		return
+	}
+
+	s.SetNamespace(bucket.Name)
+	s.SetGroups(bucket.Meta.Groups)
+
+	for r := range s.Remove(key) {
+		err = r.Error()
+	}
+
+	return
+}
+
 func ReadBucket(ell *etransport.Elliptics, name string) (bucket *Bucket, err error) {
 	ms, err := ell.MetadataSession()
 	if err != nil {

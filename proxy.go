@@ -144,6 +144,19 @@ func lookup_handler(w http.ResponseWriter, req *http.Request, strings ...string)
 	w.Write(reply_json)
 }
 
+func delete_handler(w http.ResponseWriter, req *http.Request, strings ...string) {
+	bucket := strings[0]
+	key := strings[1]
+
+	err := proxy.bctl.Delete(bucket, key, req)
+	if err != nil {
+		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 type handler struct {
 	params			int // minimal number of path components after /handler/ needed to run this handler
 	function		func(w http.ResponseWriter, req *http.Request, v...string)
@@ -165,6 +178,10 @@ var proxy_handlers = map[string]handler {
 	"/lookup/" : {
 		params: 2,
 		function: lookup_handler,
+	},
+	"/delete/" : {
+		params: 2,
+		function: delete_handler,
 	},
 	"/ping/" : {
 		params: 0,
