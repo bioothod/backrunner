@@ -145,7 +145,7 @@ func lookup_handler(w http.ResponseWriter, req *http.Request, strings ...string)
 }
 
 type handler struct {
-	params			int
+	params			int // minimal number of path components after /handler/ needed to run this handler
 	function		func(w http.ResponseWriter, req *http.Request, v...string)
 }
 
