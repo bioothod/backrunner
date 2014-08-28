@@ -407,7 +407,7 @@ func (bctl *BucketCtl) Stream(bname, key string, w http.ResponseWriter, req *htt
 	s, err := bctl.e.DataSession(req)
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
-			fmt.Sprintf("get: could not create data session: %v", err))
+			fmt.Sprintf("stream: could not create data session: %v", err))
 		return
 	}
 
@@ -455,7 +455,7 @@ func (bctl *BucketCtl) Delete(bname, key string, req *http.Request) (err error) 
 	s, err := bctl.e.DataSession(req)
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
-			fmt.Sprintf("lookup: could not create data session: %v", err))
+			fmt.Sprintf("delete: could not create data session: %v", err))
 		return
 	}
 
@@ -465,6 +465,37 @@ func (bctl *BucketCtl) Delete(bname, key string, req *http.Request) (err error) 
 	for r := range s.Remove(key) {
 		err = r.Error()
 	}
+
+	return
+}
+
+func (bctl *BucketCtl) BulkDelete(bname string, keys []string, req *http.Request) (reply map[string]interface{}, err error) {
+	reply = make(map[string]interface{})
+
+	bucket, err := bctl.FindBucket(bname)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, err.Error())
+		return
+	}
+
+	s, err := bctl.e.DataSession(req)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
+			fmt.Sprintf("bulk_delete: could not create data session: %v", err))
+		return
+	}
+
+	s.SetNamespace(bucket.Name)
+	s.SetGroups(bucket.Meta.Groups)
+
+	for r := range s.BulkRemove(keys) {
+		err = r.Error()
+		if err != nil {
+			reply[r.Key()] = err.Error()
+		}
+	}
+
+	err = nil
 
 	return
 }

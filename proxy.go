@@ -157,6 +157,57 @@ func delete_handler(w http.ResponseWriter, req *http.Request, strings ...string)
 	w.WriteHeader(http.StatusOK)
 }
 
+func bulk_delete_handler(w http.ResponseWriter, req *http.Request, strings ...string) {
+	bucket := strings[0]
+
+	var err error
+	var v map[string]interface{} = make(map[string]interface{})
+        if err = json.NewDecoder(req.Body).Decode(&v); err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
+			fmt.Sprintf("bulk_delete: could not parse input json: %v", err))
+		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
+		return
+        }
+
+	kv, ok := v["keys"]
+	if !ok {
+		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
+			fmt.Sprintf("bulk_delete: there is no 'keys' array"))
+		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
+		return
+	}
+
+	var keys []string = make([]string, 0)
+
+	for _, v := range kv.([]interface{}) {
+		keys = append(keys, v.(string))
+	}
+
+	if len(keys) == 0 {
+		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
+			fmt.Sprintf("bulk_delete: 'keys' array is empty"))
+		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
+		return
+	}
+
+	reply, err := proxy.bctl.BulkDelete(bucket, keys, req)
+	log.Printf("reply: %v, err: %v\n", reply, err)
+	if err != nil {
+		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
+		return
+	}
+
+	reply_json, err := json.Marshal(reply)
+	if err != nil {
+		log.Printf("url: %s: bulk_delete: json marshal failed: %q\n", req.URL, err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(reply_json)
+}
+
 type handler struct {
 	params			int // minimal number of path components after /handler/ needed to run this handler
 	function		func(w http.ResponseWriter, req *http.Request, v...string)
@@ -182,6 +233,10 @@ var proxy_handlers = map[string]handler {
 	"/delete/" : {
 		params: 2,
 		function: delete_handler,
+	},
+	"/bulk_delete/" : {
+		params: 1,
+		function: bulk_delete_handler,
 	},
 	"/ping/" : {
 		params: 0,
