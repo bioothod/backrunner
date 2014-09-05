@@ -247,7 +247,8 @@ func (b *Bucket) check_auth(r *http.Request, required_flags uint64) (err error) 
 	if required_flags != 0 {
 		if (acl.Flags & required_flags) != 0 {
 			err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
-				fmt.Sprintf("auth: header: '%v': user '%s' is not allowed to do action: acl-flags: 0x%x, required-flags: 0x%x",
+				fmt.Sprintf("auth: header: '%v': user '%s' is not allowed to do action: "
+					"acl-flags: 0x%x, required-flags: 0x%x",
 					r.Header[auth.AuthHeaderStr], user, acl.Flags, required_flags))
 		}
 	}
@@ -317,7 +318,8 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 
 	lheader, ok := req.Header["Content-Length"]
 	if !ok {
-		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, "upload: there is no Content-Length header")
+		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
+			"upload: there is no Content-Length header")
 		return
 	}
 
@@ -349,7 +351,8 @@ func (bctl *BucketCtl) Upload(key string, req *http.Request) (reply map[string]i
 	return
 }
 
-func (bctl *BucketCtl) BucketUpload(bucket_name, key string, req *http.Request) (reply map[string]interface{}, bucket *Bucket, err error) {
+func (bctl *BucketCtl) BucketUpload(bucket_name, key string, req *http.Request)
+			(reply map[string]interface{}, bucket *Bucket, err error) {
 	bucket, err = bctl.FindBucket(bucket_name)
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, err.Error())
@@ -387,7 +390,8 @@ func (bctl *BucketCtl) Get(bname, key string, req *http.Request) (resp []byte, e
 	for rd := range s.ReadData(key, 0, 0) {
 		err = rd.Error()
 		if err != nil {
-			err = errors.NewKeyErrorFromEllipticsError(rd.Error(), req.URL.String(), "get: could not read data")
+			err = errors.NewKeyErrorFromEllipticsError(rd.Error(), req.URL.String(),
+				"get: could not read data")
 			continue
 		}
 
@@ -544,7 +548,8 @@ func ReadBucket(ell *etransport.Elliptics, name string) (bucket *Bucket, err err
 		return
 	}
 
-	err = errors.NewKeyError(name, http.StatusNotFound, "could not read bucket data: ReadData() returned nothing")
+	err = errors.NewKeyError(name, http.StatusNotFound,
+		"could not read bucket data: ReadData() returned nothing")
 	return
 }
 
@@ -590,7 +595,8 @@ func WriteBucket(ell *etransport.Elliptics, meta *BucketMsgpack) (bucket *Bucket
 		return
 	}
 
-	err = errors.NewKeyError(meta.Name, http.StatusNotFound, "could not write bucket metadata: WriteData() returned nothing")
+	err = errors.NewKeyError(meta.Name, http.StatusNotFound,
+		"could not write bucket metadata: WriteData() returned nothing")
 	return
 }
 
