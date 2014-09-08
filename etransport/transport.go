@@ -83,6 +83,16 @@ func (e *Elliptics) DataSession(req *http.Request) (s *elliptics.Session, err er
 	return
 }
 
+func (e *Elliptics) Stat() (reply interface{}, err error) {
+	s, err := elliptics.NewSession(e.node)
+	if err != nil {
+		return
+	}
+
+	reply = s.DnetStat().StatData()
+	return
+}
+
 func NewEllipticsTransport(config_file string) (e *Elliptics, err error) {
 	e = &Elliptics {
 	}

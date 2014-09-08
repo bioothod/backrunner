@@ -17,7 +17,7 @@ import (
 
 var (
 	proxy bproxy
-	IdleTimeout		= 50 * time.Second
+	IdleTimeout		= 150 * time.Second
 )
 
 type bproxy struct {
@@ -208,6 +208,24 @@ func bulk_delete_handler(w http.ResponseWriter, req *http.Request, strings ...st
 	w.Write(reply_json)
 }
 
+func stat_handler(w http.ResponseWriter, req *http.Request, strings ...string) {
+	reply, err := proxy.bctl.Stat(req)
+	if err != nil {
+		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
+		return
+	}
+
+	reply_json, err := json.Marshal(reply)
+	if err != nil {
+		log.Printf("url: %s: stat: json marshal failed: %q\n", req.URL, err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(reply_json)
+}
+
 type handler struct {
 	params			int // minimal number of path components after /handler/ needed to run this handler
 	function		func(w http.ResponseWriter, req *http.Request, v...string)
@@ -241,6 +259,10 @@ var proxy_handlers = map[string]handler {
 	"/ping/" : {
 		params: 0,
 		function: ping_handler,
+	},
+	"/stat/" : {
+		params: 0,
+		function: stat_handler,
 	},
 }
 
