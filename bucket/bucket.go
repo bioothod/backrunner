@@ -291,6 +291,7 @@ func (bucket *Bucket) lookup_serialize(write bool, ch <-chan elliptics.Lookuper)
 	egroups = make([]uint32, 0)
 	sgroups = make([]uint32, 0)
 
+	var err error
 	for l := range ch {
 		ret := make(map[string]interface{})
 		if l.Error() != nil {
@@ -300,6 +301,7 @@ func (bucket *Bucket) lookup_serialize(write bool, ch <-chan elliptics.Lookuper)
 			if write {
 				bucket.HalfRate()
 			}
+			err = l.Error()
 		} else {
 			sgroups = append(sgroups, l.Cmd().ID.Group)
 
@@ -325,7 +327,11 @@ func (bucket *Bucket) lookup_serialize(write bool, ch <-chan elliptics.Lookuper)
 	reply["success-groups"] = sgroups
 	reply["error-groups"] = egroups
 
-	return reply, nil
+	if len(sgroups) != 0 {
+		err = nil
+	}
+
+	return reply, err
 }
 
 func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Request) (reply map[string]interface{}, err error) {
