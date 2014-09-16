@@ -19,12 +19,39 @@ func (k *KeyError) Error() string {
 		k.url, k.status, k.data)
 }
 
+func EllipticsErrorToStatus(err error) int {
+	status := http.StatusBadRequest
+
+	if de, ok := err.(*elliptics.DnetError); ok {
+		err_code := elliptics.ErrorStatus(de)
+
+		switch syscall.Errno(-err_code) {
+		case syscall.ENXIO:
+			status = http.StatusServiceUnavailable
+		case syscall.ETIMEDOUT:
+			status = http.StatusServiceUnavailable
+		case syscall.EIO:
+			status = http.StatusServiceUnavailable
+		case syscall.ENOENT:
+			status = http.StatusNotFound
+		case syscall.EILSEQ:
+			status = http.StatusNotFound
+		case syscall.EBADFD:
+			status = http.StatusNotFound
+		case syscall.EINVAL:
+			status = http.StatusBadRequest
+		}
+	}
+
+	return status
+}
+
 func ErrorStatus(err error) int {
 	if ke, ok := err.(*KeyError); ok {
 		return ke.status
 	}
 
-	return 555
+	return EllipticsErrorToStatus(err)
 }
 
 func ErrorData(err error) string {
@@ -48,14 +75,7 @@ func NewKeyError(url string, status int, data string) (err *KeyError) {
 func NewKeyErrorFromEllipticsError(ellerr error, url, message string) (err *KeyError) {
 	err_code := elliptics.ErrorStatus(ellerr)
 	err_message := elliptics.ErrorData(ellerr)
-	status := http.StatusBadRequest
-
-	switch syscall.Errno(-err_code) {
-	case syscall.ENXIO:
-		status = http.StatusServiceUnavailable
-	case syscall.ENOENT:
-		status = http.StatusNotFound
-	}
+	status := EllipticsErrorToStatus(ellerr)
 
 	err = NewKeyError(url, status,
 		fmt.Sprintf("%s: elliptics-code: %d, elliptics-message: %s",
