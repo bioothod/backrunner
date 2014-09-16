@@ -53,7 +53,7 @@ type BucketMsgpack struct {
 }
 
 func (meta *BucketMsgpack) PackMsgpack() (interface{}, error) {
-	var out []interface{} = make([]interface{}, 7, 7)
+	var out []interface{} = make([]interface{}, 10, 10)
 
 	out[0] = meta.Version
 	out[1] = meta.Name
@@ -80,12 +80,16 @@ func (meta *BucketMsgpack) PackMsgpack() (interface{}, error) {
 	out[5] = meta.MaxSize
 	out[6] = meta.MaxKeyNum
 
+	for i, r := range meta.reserved {
+		out[7 + i] = r
+	}
+
 	return out, nil
 }
 
 func (meta *BucketMsgpack) ExtractMsgpack(out []interface{}) (err error) {
-	if len(out) < 7 {
-		return fmt.Errorf("array length: %d, must be at least 7", len(out))
+	if len(out) < 10 {
+		return fmt.Errorf("array length: %d, must be at least 10", len(out))
 	}
 	meta.Version = int32(out[0].(int64))
 	if meta.Version != 1 {
@@ -127,6 +131,10 @@ func (meta *BucketMsgpack) ExtractMsgpack(out []interface{}) (err error) {
 	meta.Flags = uint64(out[4].(int64))
 	meta.MaxSize = uint64(out[5].(int64))
 	meta.MaxKeyNum = uint64(out[6].(int64))
+
+	for i := range meta.reserved {
+		meta.reserved[i] = uint64(out[7 + i].(int64))
+	}
 
 	return nil
 }
