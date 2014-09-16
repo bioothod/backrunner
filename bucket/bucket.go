@@ -533,10 +533,11 @@ func (bctl *BucketCtl) BulkDelete(bname string, keys []string, req *http.Request
 func (bctl *BucketCtl) Stat(req *http.Request) (reply map[string]interface{}, err error) {
 	reply = make(map[string]interface{})
 
+	buckets := make(map[string]interface{})
 	for _, b := range bctl.Bucket {
-		reply[b.Name], err = b.Stat()
+		buckets[b.Name], err = b.Stat()
 		if err != nil {
-			reply[b.Name] = err_struct {
+			buckets[b.Name] = err_struct {
 				Error: err.Error(),
 			}
 			err = nil
@@ -544,13 +545,18 @@ func (bctl *BucketCtl) Stat(req *http.Request) (reply map[string]interface{}, er
 		}
 	}
 
-	reply["storage"], err = bctl.e.Stat()
+	storage := make(map[string]interface{})
+	groups, err := bctl.e.Stat()
 	if err != nil {
-		reply["storage"] = err_struct {
+		groups = err_struct {
 			Error: err.Error(),
 		}
 		err = nil
 	}
+
+	storage["groups"] = groups
+	reply["buckets"] = buckets
+	reply["storage"] = storage
 
 	return
 }
