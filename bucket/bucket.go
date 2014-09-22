@@ -209,6 +209,10 @@ func (bctl *BucketCtl) GetBucket() (bucket *Bucket) {
 		sum += b.BPS
 	}
 
+	if sum < 1 {
+		return bctl.Bucket[rand.Intn(len(bctl.Bucket))]
+	}
+
 	r := rand.Int63n(int64(sum))
 	for _, b := range bctl.Bucket {
 		r -= int64(b.BPS)
