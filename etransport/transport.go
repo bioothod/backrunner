@@ -24,6 +24,8 @@ type Elliptics struct {
 
 	node		*elliptics.Node
 	metadata_groups	[]int32
+
+	prev_stat	*elliptics.DnetStat
 }
 
 func (e *Elliptics) MetadataSession() (ms *elliptics.Session, err error) {
@@ -84,17 +86,27 @@ func (e *Elliptics) DataSession(req *http.Request) (s *elliptics.Session, err er
 }
 
 func (e *Elliptics) Stat() (reply interface{}, err error) {
+	// this is kind of cache - we do not update statistics more frequently that 1 second
+	if prev_stat != nil && time.Since(prev_stat.Time).Seconds() <= 1.0 {
+		reply = prev_stat.StatData()
+		return
+	}
+
 	s, err := elliptics.NewSession(e.node)
 	if err != nil {
 		return
 	}
 
-	reply = s.DnetStat().StatData()
+	stat := s.DnetStat()
+	stat.Diff(e.prev_stat)
+	e.prev_stat = stat
+	reply = stat.StatData()
 	return
 }
 
 func NewEllipticsTransport(config_file string) (e *Elliptics, err error) {
 	e = &Elliptics {
+		prev_stat: nil,
 	}
 
 	conf_interface, err := config.Parse(config_file)
