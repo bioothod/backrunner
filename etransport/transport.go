@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 	//"unsafe"
 )
 
@@ -87,8 +88,8 @@ func (e *Elliptics) DataSession(req *http.Request) (s *elliptics.Session, err er
 
 func (e *Elliptics) Stat() (reply interface{}, err error) {
 	// this is kind of cache - we do not update statistics more frequently that 1 second
-	if prev_stat != nil && time.Since(prev_stat.Time).Seconds() <= 1.0 {
-		reply = prev_stat.StatData()
+	if e.prev_stat != nil && time.Since(e.prev_stat.Time).Seconds() <= 1.0 {
+		reply = e.prev_stat.StatData()
 		return
 	}
 
