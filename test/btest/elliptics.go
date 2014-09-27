@@ -95,9 +95,9 @@ func (bt *BackrunnerTest) StartElliptics() {
 			},
 			Wait_Timeout: 60,
 			Check_Timeout: 120,
-			NonBlocking_IO_Thread_Num: 4,
-			IO_Thread_Num: 8,
-			Net_Thread_Num: 2,
+			NonBlocking_IO_Thread_Num: 2,
+			IO_Thread_Num: 2,
+			Net_Thread_Num: 1,
 			Daemon: false,
 			Auth_Cookie: fmt.Sprintf("%016x", rand.Int63()),
 			Monitor: Monitor {
