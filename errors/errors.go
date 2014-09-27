@@ -3,7 +3,6 @@ package errors
 import (
 	"fmt"
 	"github.com/bioothod/elliptics-go/elliptics"
-	"log"
 	"net/http"
 	"syscall"
 )
@@ -68,7 +67,6 @@ func NewKeyError(url string, status int, data string) (err *KeyError) {
 		status: status,
 		data:   data,
 	}
-	log.Printf("%v\n", err.Error())
 	return
 }
 

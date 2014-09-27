@@ -7,6 +7,7 @@ import (
 	"github.com/bioothod/backrunner/errors"
 	"github.com/bioothod/backrunner/bucket"
 	"github.com/bioothod/backrunner/etransport"
+	"github.com/bioothod/backrunner/reply"
 	"log"
 	"math/rand"
 	"net/http"
@@ -26,7 +27,19 @@ type bproxy struct {
 	ell		*etransport.Elliptics
 }
 
-func ping_handler(w http.ResponseWriter, r *http.Request, strings ...string) {
+type Reply struct {
+	status		int
+	err		error
+}
+
+func GoodReply() Reply {
+	return Reply {
+		err: nil,
+		status: http.StatusOK,
+	}
+}
+
+func ping_handler(w http.ResponseWriter, r *http.Request, strings ...string) Reply {
 	message := "Ping OK"
 
 	buckets := make([]interface{}, 0)
@@ -43,29 +56,20 @@ func ping_handler(w http.ResponseWriter, r *http.Request, strings ...string) {
 		message = fmt.Sprintf("marshaling error: %v", err)
 	}
 	http.Error(w, message, http.StatusOK)
+
+	return GoodReply()
 }
 
 func (p *bproxy) local_url(key, bucket, operation string) string {
 	return fmt.Sprintf("http://%s/%s/%s/%s", p.host, operation, bucket, key)
 }
 
-func (p *bproxy) send_upload_reply(w http.ResponseWriter, req *http.Request, bucket *bucket.Bucket, key string, resp map[string]interface{}) {
-	type ent_reply struct {
-		Get    string `json:"get"`
-		Update string `json:"update"`
-		Delete string `json:"delete"`
-		Key    string `json:"key"`
-	}
-	type upload_reply struct {
-		Bucket  string       `json:"bucket"`
-		Primary ent_reply    `json:"primary"`
-		Reply   *map[string]interface{} `json:"reply"`
-	}
-
-	reply := upload_reply {
+func (p *bproxy) send_upload_reply(w http.ResponseWriter, req *http.Request,
+		bucket *bucket.Bucket, key string, resp map[string]interface{}) Reply {
+	reply := reply.Upload {
 		Bucket: bucket.Name,
 		Reply:  &resp,
-		Primary: ent_reply{
+		Primary: reply.Entry {
 			Key:	key,
 			Get:    "GET " + proxy.local_url(key, bucket.Name, "get"),
 			Update: "POST " + proxy.local_url(key, bucket.Name, "upload"),
@@ -77,87 +81,114 @@ func (p *bproxy) send_upload_reply(w http.ResponseWriter, req *http.Request, buc
 	if err != nil {
 		log.Printf("url: %s: upload: json marshal failed: %q\n", req.URL, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+
+		return Reply {
+			err: err,
+			status: http.StatusBadRequest,
+		}
 	}
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(reply_json)
+
+	return GoodReply()
 }
 
-func nobucket_upload_handler(w http.ResponseWriter, req *http.Request, strings ...string) {
+func nobucket_upload_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
 	key := strings[0]
 
 	resp, bucket, err := proxy.bctl.Upload(key, req)
 	if err != nil {
 		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
-		return
+		return Reply {
+			err: err,
+			status: errors.ErrorStatus(err),
+		}
 	}
 
-	proxy.send_upload_reply(w, req, bucket, key, resp)
-	return
+	return proxy.send_upload_reply(w, req, bucket, key, resp)
 }
 
-func bucket_upload_handler(w http.ResponseWriter, req *http.Request, strings ...string) {
+func bucket_upload_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
 	bucket := strings[0]
 	key := strings[1]
 
 	resp, b, err := proxy.bctl.BucketUpload(bucket, key, req)
 	if err != nil {
 		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
-		return
+		return Reply {
+			err: err,
+			status: errors.ErrorStatus(err),
+		}
 	}
 
-	proxy.send_upload_reply(w, req, b, key, resp)
-	return
+	return proxy.send_upload_reply(w, req, b, key, resp)
 }
 
-func get_handler(w http.ResponseWriter, req *http.Request, strings ...string) {
+func get_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
 	bucket := strings[0]
 	key := strings[1]
 
 	err := proxy.bctl.Stream(bucket, key, w, req)
 	if err != nil {
 		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
-		return
+		return Reply {
+			err: err,
+			status: errors.ErrorStatus(err),
+		}
 	}
-	return
+
+	return GoodReply()
 }
 
-func lookup_handler(w http.ResponseWriter, req *http.Request, strings ...string) {
+func lookup_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
 	bucket := strings[0]
 	key := strings[1]
 
 	reply, err := proxy.bctl.Lookup(bucket, key, req)
 	if err != nil {
 		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
-		return
+		return Reply {
+			err: err,
+			status: errors.ErrorStatus(err),
+		}
 	}
 
 	reply_json, err := json.Marshal(reply)
 	if err != nil {
 		log.Printf("url: %s: lookup: json marshal failed: %q\n", req.URL, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return Reply {
+			err: err,
+			status: http.StatusBadRequest,
+		}
 	}
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(reply_json)
+
+	return GoodReply()
 }
 
-func delete_handler(w http.ResponseWriter, req *http.Request, strings ...string) {
+func delete_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
 	bucket := strings[0]
 	key := strings[1]
 
 	err := proxy.bctl.Delete(bucket, key, req)
 	if err != nil {
 		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
-		return
+		return Reply {
+			err: err,
+			status: errors.ErrorStatus(err),
+		}
 	}
 
 	w.WriteHeader(http.StatusOK)
+
+	return GoodReply()
 }
 
-func bulk_delete_handler(w http.ResponseWriter, req *http.Request, strings ...string) {
+func bulk_delete_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
 	bucket := strings[0]
 
 	var err error
@@ -166,7 +197,10 @@ func bulk_delete_handler(w http.ResponseWriter, req *http.Request, strings ...st
 		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
 			fmt.Sprintf("bulk_delete: could not parse input json: %v", err))
 		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
-		return
+		return Reply {
+			err: err,
+			status: errors.ErrorStatus(err),
+		}
         }
 
 	kv, ok := v["keys"]
@@ -174,7 +208,10 @@ func bulk_delete_handler(w http.ResponseWriter, req *http.Request, strings ...st
 		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
 			fmt.Sprintf("bulk_delete: there is no 'keys' array"))
 		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
-		return
+		return Reply {
+			err: err,
+			status: errors.ErrorStatus(err),
+		}
 	}
 
 	var keys []string = make([]string, 0)
@@ -187,48 +224,67 @@ func bulk_delete_handler(w http.ResponseWriter, req *http.Request, strings ...st
 		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
 			fmt.Sprintf("bulk_delete: 'keys' array is empty"))
 		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
-		return
+		return Reply {
+			err: err,
+			status: errors.ErrorStatus(err),
+		}
 	}
 
 	reply, err := proxy.bctl.BulkDelete(bucket, keys, req)
 	log.Printf("reply: %v, err: %v\n", reply, err)
 	if err != nil {
 		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
-		return
+		return Reply {
+			err: err,
+			status: errors.ErrorStatus(err),
+		}
 	}
 
 	reply_json, err := json.Marshal(reply)
 	if err != nil {
 		log.Printf("url: %s: bulk_delete: json marshal failed: %q\n", req.URL, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return Reply {
+			err: err,
+			status: http.StatusBadRequest,
+		}
 	}
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(reply_json)
+
+	return GoodReply()
 }
 
-func stat_handler(w http.ResponseWriter, req *http.Request, strings ...string) {
+func stat_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
 	reply, err := proxy.bctl.Stat(req)
 	if err != nil {
 		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
-		return
+		return Reply {
+			err: err,
+			status: errors.ErrorStatus(err),
+		}
 	}
 
 	reply_json, err := json.Marshal(reply)
 	if err != nil {
 		log.Printf("url: %s: stat: json marshal failed: %q\n", req.URL, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return Reply {
+			err: err,
+			status: http.StatusBadRequest,
+		}
 	}
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(reply_json)
+
+	return GoodReply()
 }
 
 type handler struct {
 	params			int // minimal number of path components after /handler/ needed to run this handler
-	function		func(w http.ResponseWriter, req *http.Request, v...string)
+	function		func(w http.ResponseWriter, req *http.Request, v...string) Reply
 }
 
 var proxy_handlers = map[string]handler {
@@ -267,20 +323,37 @@ var proxy_handlers = map[string]handler {
 }
 
 func generic_handler(w http.ResponseWriter, req *http.Request) {
+	// join together sequential // in the URL path
+
+	reply := Reply {
+		status: http.StatusBadRequest,
+		err: errors.NewKeyError(req.URL.String(), http.StatusBadRequest, "there is no registered handler for this path"),
+	}
+	need_flush := true
+
 	for k, v := range proxy_handlers {
 		if (strings.HasPrefix(req.URL.Path, k)) {
 			path := req.URL.Path[len(k):]
 			tmp := strings.SplitN(path, "/", v.params)
 
 			if len(tmp) >= v.params {
-				v.function(w, req, tmp...)
-				return
+				reply = v.function(w, req, tmp...)
+				need_flush = false
+				break
 			}
 		}
 	}
 
-	err := errors.NewKeyError(req.URL.String(), http.StatusBadRequest, "there is no registered handler for this path")
-	http.Error(w, err.Error(), http.StatusBadRequest)
+	msg := "OK"
+	if reply.err != nil {
+		msg = reply.err.Error()
+	}
+
+	log.Printf("access_log: url: %s, status: %d, err: %v\n", req.URL.String(), reply.status, msg)
+
+	if need_flush {
+		http.Error(w, reply.err.Error(), http.StatusBadRequest)
+	}
 }
 
 func getTimeoutServer(addr string, handler http.Handler) *http.Server {
@@ -319,9 +392,10 @@ func main() {
 	if *config == "" {
 		log.Fatal("You must specify config file")
 	}
-	var err error
-	proxy.ell, err = etransport.NewEllipticsTransport(*config)
 
+	var err error
+
+	proxy.ell, err = etransport.NewEllipticsTransport(*config)
 	if err != nil {
 		log.Fatalf("Could not create Elliptics transport: %v", err)
 	}

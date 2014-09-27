@@ -35,9 +35,19 @@ type BucketACL struct {
 }
 
 const (
+	// a placeholder for /get/ request which doesn't enforce additional checks besides auth check,
+	// i.e. it is not admin, it is not modification
 	BucketAuthEmpty		uint64		= 0
+
+	// when ACL contains this flag, no further auth checks are ever performed for given user
 	BucketAuthNoToken	uint64		= 1
+
+	// ACL must contain this flag to allow user to upload data
 	BucketAuthWrite		uint64		= 2
+
+	// currently unused ACL flag which was introduced to split admin role (bucket modification) from usual writers
+	// it is unused since backrunner doesn't support bucket modification or creation,
+	// there is special tool @bmeta for this
 	BucketAuthAdmin		uint64		= 4
 )
 
@@ -263,20 +273,25 @@ func (b *Bucket) check_auth(r *http.Request, required_flags uint64) (err error) 
 		return
 	}
 
+	log.Printf("check-auth: user: %s, token: %s, flags: %x, required: %x\n", acl.User, acl.Token, acl.Flags, required_flags)
+
+	// only require required_flags check if its not @BucketAuthEmpty
+	// @BucketAuthEmpty required_flags is set by reader, non BucketAuthEmpty required_flags are supposed to mean modifications
+	if required_flags != BucketAuthEmpty {
+		// there are no required flags in ACL
+		if (acl.Flags & required_flags) == 0 {
+			err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
+				fmt.Sprintf("auth: header: '%v': user '%s' is not allowed to do action: acl-flags: 0x%x, required-flags: 0x%x",
+					r.Header[auth.AuthHeaderStr], user, acl.Flags, required_flags))
+			return
+		}
+	}
+
 	// skip authorization if special ACL flag is set
 	if (acl.Flags & BucketAuthNoToken) != 0 {
 		return
 	}
 
-	// only require required_flags check if its not 0
-	// 0 required_flags are set by reader, non 0 required_flags are supposed to mean modifications
-	if required_flags != 0 {
-		if (acl.Flags & required_flags) != 0 {
-			err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
-				fmt.Sprintf("auth: header: '%v': user '%s' is not allowed to do action: acl-flags: 0x%x, required-flags: 0x%x",
-					r.Header[auth.AuthHeaderStr], user, acl.Flags, required_flags))
-		}
-	}
 
 	calc_auth, err := auth.GenerateSignature(acl.Token, r.Method, r.URL, r.Header)
 	if err != nil {
@@ -288,8 +303,8 @@ func (b *Bucket) check_auth(r *http.Request, required_flags uint64) (err error) 
 
 	if recv_auth != calc_auth {
 		err = errors.NewKeyError(r.URL.String(), http.StatusForbidden,
-			fmt.Sprintf("auth: header: '%v': hmac mismatch: recv: '%s', calc: '%s'",
-				r.Header[auth.AuthHeaderStr], user))
+			fmt.Sprintf("auth: header: '%v': user: %s, hmac mismatch: recv: '%s', calc: '%s'",
+				r.Header[auth.AuthHeaderStr], user, recv_auth, calc_auth))
 		return
 	}
 
@@ -411,7 +426,7 @@ func (bctl *BucketCtl) Get(bname, key string, req *http.Request) (resp []byte, e
 	err = bucket.check_auth(req, BucketAuthEmpty)
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), errors.ErrorStatus(err),
-			fmt.Sprintf("upload: %s", errors.ErrorData(err)))
+			fmt.Sprintf("get: %s", errors.ErrorData(err)))
 		return
 	}
 
@@ -446,6 +461,14 @@ func (bctl *BucketCtl) Stream(bname, key string, w http.ResponseWriter, req *htt
 		return
 	}
 
+	err = bucket.check_auth(req, BucketAuthEmpty)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), errors.ErrorStatus(err),
+			fmt.Sprintf("upload: %s", errors.ErrorData(err)))
+		return
+	}
+
+
 	s, err := bctl.e.DataSession(req)
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
@@ -473,6 +496,14 @@ func (bctl *BucketCtl) Lookup(bname, key string, req *http.Request) (reply map[s
 		return
 	}
 
+	err = bucket.check_auth(req, BucketAuthEmpty)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), errors.ErrorStatus(err),
+			fmt.Sprintf("upload: %s", errors.ErrorData(err)))
+		return
+	}
+
+
 	s, err := bctl.e.DataSession(req)
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
@@ -493,6 +524,14 @@ func (bctl *BucketCtl) Delete(bname, key string, req *http.Request) (err error) 
 		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, err.Error())
 		return
 	}
+
+	err = bucket.check_auth(req, BucketAuthWrite)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), errors.ErrorStatus(err),
+			fmt.Sprintf("upload: %s", errors.ErrorData(err)))
+		return
+	}
+
 
 	s, err := bctl.e.DataSession(req)
 	if err != nil {
@@ -519,6 +558,14 @@ func (bctl *BucketCtl) BulkDelete(bname string, keys []string, req *http.Request
 		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, err.Error())
 		return
 	}
+
+	err = bucket.check_auth(req, BucketAuthWrite)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), errors.ErrorStatus(err),
+			fmt.Sprintf("upload: %s", errors.ErrorData(err)))
+		return
+	}
+
 
 	s, err := bctl.e.DataSession(req)
 	if err != nil {
@@ -740,6 +787,7 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path string) (bctl *BucketCt
 		if len(name) > 0 {
 			b, err := ReadBucket(bctl.e, name)
 			if err != nil {
+				log.Printf("bucket-ctl: could not read bucket: %s: %v\n", name, err)
 				continue
 			}
 

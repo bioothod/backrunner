@@ -3,7 +3,7 @@ package etransport
 import (
 	"C"
 	//"encoding/json"
-	//"fmt"
+	"fmt"
 	"github.com/bioothod/elliptics-go/elliptics"
 	//"github.com/bioothod/backrunner/auth"
 	"github.com/bioothod/backrunner/config"
@@ -20,27 +20,27 @@ import (
 )
 
 type Elliptics struct {
-	log_file	io.Writer
-	log		*log.Logger
+	LogFile		io.Writer
+	Log		*log.Logger
 
-	node		*elliptics.Node
-	metadata_groups	[]int32
+	Node		*elliptics.Node
+	MetadataGroups	[]int32
 
 	prev_stat	*elliptics.DnetStat
 }
 
 func (e *Elliptics) MetadataSession() (ms *elliptics.Session, err error) {
-	ms, err = elliptics.NewSession(e.node)
+	ms, err = elliptics.NewSession(e.Node)
 	if err != nil {
 		return
 	}
 
-	ms.SetGroups(e.metadata_groups)
+	ms.SetGroups(e.MetadataGroups)
 	return
 }
 
 func (e *Elliptics) DataSession(req *http.Request) (s *elliptics.Session, err error) {
-	s, err = elliptics.NewSession(e.node)
+	s, err = elliptics.NewSession(e.Node)
 	if err != nil {
 		return
 	}
@@ -93,7 +93,7 @@ func (e *Elliptics) Stat() (reply interface{}, err error) {
 		return
 	}
 
-	s, err := elliptics.NewSession(e.node)
+	s, err := elliptics.NewSession(e.Node)
 	if err != nil {
 		return
 	}
@@ -125,14 +125,17 @@ func NewEllipticsTransport(config_file string) (e *Elliptics, err error) {
 		log.Fatal("'log-file' and 'log-level' config parameters must be set")
 	}
 
-	e.log_file, err = os.OpenFile(conf["log-file"].(string), os.O_RDWR | os.O_APPEND | os.O_CREATE, 0644)
+	e.LogFile, err = os.OpenFile(conf["log-file"].(string), os.O_RDWR | os.O_APPEND | os.O_CREATE, 0644)
 	if err != nil {
 		log.Fatalf("Could not open log file '%s': %q", conf["log-file"].(string), err)
 	}
 
-	e.log = log.New(e.log_file, prefix, log.LstdFlags | log.Lmicroseconds)
+	e.Log = log.New(e.LogFile, fmt.Sprintf("elliptics: %s", prefix), log.LstdFlags | log.Lmicroseconds)
+	log.SetPrefix(prefix)
+	log.SetOutput(e.LogFile)
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
-	e.node, err = elliptics.NewNode(e.log, conf["log-level"].(string))
+	e.Node, err = elliptics.NewNode(e.Log, conf["log-level"].(string))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -153,10 +156,10 @@ func NewEllipticsTransport(config_file string) (e *Elliptics, err error) {
 	}
 
 	for _, m := range conf["metadata-groups"].([]interface{}) {
-		e.metadata_groups = append(e.metadata_groups, int32(m.(float64)))
+		e.MetadataGroups = append(e.MetadataGroups, int32(m.(float64)))
 	}
 
-	err = e.node.AddRemotes(remotes)
+	err = e.Node.AddRemotes(remotes)
 	if err != nil {
 		log.Fatalf("Could not connect to any remote node from %q: %q", remotes, err)
 	}
