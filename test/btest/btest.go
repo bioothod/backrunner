@@ -102,12 +102,15 @@ func (t *BackrunnerTest) check_upload_reply(bucket, key string, resp *http.Respo
 }
 
 func (t *BackrunnerTest) NewRequest(method, handler, user, token, bucket, key string, body io.Reader) *http.Request {
-	var url string
-	if bucket == "" {
-		url = fmt.Sprintf("http://%s/%s/%s", t.remote, handler, key)
-	} else {
-		url = fmt.Sprintf("http://%s/%s/%s/%s", t.remote, handler, bucket, key)
+	url := fmt.Sprintf("http://%s/%s", t.remote, handler)
+
+	if bucket != "" {
+		url = fmt.Sprintf("%s/%s", url, bucket)
 	}
+	if key != "" {
+		url = fmt.Sprintf("%s/%s", url, key)
+	}
+
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		log.Fatal("Could not create request: method: %s, url: '%s': %v\n", method, url, err)
@@ -329,6 +332,131 @@ func test_small_bucket_upload(t *BackrunnerTest) error {
 	return t.check_upload_reply(bucket, key, resp)
 }
 
+func test_bucket_delete(t *BackrunnerTest) error {
+	bucket := t.io_buckets[rand.Intn(len(t.io_buckets))]
+	key := strconv.FormatInt(rand.Int63(), 16)
+
+	// [1, 1+100) kbytes
+	total_size := 1024 * (rand.Int31n(100) + 1)
+	buf := make([]byte, total_size)
+	body := bytes.NewReader(buf)
+	req := t.NewRequest("POST", "upload", t.all_allowed_user, t.all_allowed_token, bucket, key, body)
+
+	resp, err := t.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("delete: url: %s: could not send initial upload request: %v", req.URL.String(), err.Error())
+	}
+	defer resp.Body.Close()
+
+	err = t.check_upload_reply(bucket, key, resp)
+	if err != nil {
+		return err
+	}
+
+	req = t.NewRequest("POST", "delete", t.all_allowed_user, t.all_allowed_token, bucket, key, body)
+	dresp, err := t.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("delete: url: %s: could not send delete request: %v", req.URL.String(), err.Error())
+	}
+	defer dresp.Body.Close()
+
+	data, err := ioutil.ReadAll(dresp.Body)
+	if err != nil {
+		return fmt.Errorf("delete: url: %s: could not read response body: %v", req.URL.String(), err.Error())
+	}
+
+	if dresp.StatusCode != http.StatusOK {
+		return fmt.Errorf("delete: url: %s: could not delete key: returned data: %s", req.URL.String(), string(data))
+	}
+
+	req = t.NewRequest("GET", "get", t.all_allowed_user, t.all_allowed_token, bucket, key, body)
+	read, err := t.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("delete: url: %s: could not send final check request: %v", req.URL.String(), err.Error())
+	}
+	defer read.Body.Close()
+
+	if read.StatusCode != http.StatusNotFound {
+		return fmt.Errorf("delete: url: %s: we read something (status: %d) while it should be %d",
+			req.URL.String(), read.StatusCode, http.StatusNotFound)
+	}
+
+	return nil
+}
+
+func test_bucket_bulk_delete(t *BackrunnerTest) error {
+	bucket := t.io_buckets[rand.Intn(len(t.io_buckets))]
+
+	keys := make([]string, 0)
+
+	for i := 0; i < 1000; i++ {
+		key := strconv.FormatInt(rand.Int63(), 16)
+		keys = append(keys, key)
+
+		// [1, 1+100) kbytes
+		total_size := 1024 * (rand.Int31n(100) + 1)
+		buf := make([]byte, total_size)
+		body := bytes.NewReader(buf)
+		req := t.NewRequest("POST", "upload", t.all_allowed_user, t.all_allowed_token, bucket, key, body)
+
+		resp, err := t.client.Do(req)
+		if err != nil {
+			return fmt.Errorf("bulk-delete: url: %s: could not send upload request: %v", req.URL.String(), err.Error())
+		}
+		defer resp.Body.Close()
+
+		err = t.check_upload_reply(bucket, key, resp)
+		if err != nil {
+			return err
+		}
+	}
+
+	type bulk_delete struct {
+		Keys	[]string	`json:"keys"`
+	}
+
+	bdel := bulk_delete {
+		Keys: keys,
+	}
+
+	data, err := json.Marshal(&bdel)
+	if err != nil {
+		return fmt.Errorf("bulk-delete: could not marshal json: %v", err.Error())
+	}
+
+	req := t.NewRequest("POST", "bulk_delete", t.all_allowed_user, t.all_allowed_token, bucket, "", bytes.NewReader(data))
+	dresp, err := t.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("bulk-delete: url: %s: could not send bulk delete request: %v", req.URL.String(), err.Error())
+	}
+	defer dresp.Body.Close()
+
+	data, err = ioutil.ReadAll(dresp.Body)
+	if err != nil {
+		return fmt.Errorf("bulk-delete url: %s: could not read response body: %v", req.URL.String(), err.Error())
+	}
+
+	if dresp.StatusCode != http.StatusOK {
+		return fmt.Errorf("bulk-delete: url: %s: could not delete key: returned data: %s", req.URL.String(), string(data))
+	}
+
+	for _, key := range keys {
+		req = t.NewRequest("GET", "get", t.all_allowed_user, t.all_allowed_token, bucket, key, bytes.NewReader([]byte{}))
+		read, err := t.client.Do(req)
+		if err != nil {
+			return fmt.Errorf("bulk-delete: url: %s: could not send final check request: %v", req.URL.String(), err.Error())
+		}
+		defer read.Body.Close()
+
+		if read.StatusCode != http.StatusNotFound {
+			return fmt.Errorf("url: %s: we read something (status: %d) while it should be %d",
+				req.URL.String(), read.StatusCode, http.StatusNotFound)
+		}
+	}
+
+	return nil
+}
+
 func test_nobucket_upload(t *BackrunnerTest) error {
 	key := strconv.FormatInt(rand.Int63(), 16)
 
@@ -353,6 +481,8 @@ var tests = [](func(t *BackrunnerTest) error) {
 	test_small_bucket_upload,
 	test_big_bucket_upload,
 	test_acl,
+	test_bucket_delete,
+	test_bucket_bulk_delete,
 }
 
 func FunctionName(i interface{}) string {
