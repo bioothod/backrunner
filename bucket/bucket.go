@@ -213,6 +213,32 @@ func (bctl *BucketCtl) FindBucket(name string) (bucket *Bucket, err error) {
 	return
 }
 
+func URIOffsetSize(req *http.Request) (offset uint64, size uint64, err error) {
+	offset = 0
+	size = 0
+
+	q := req.URL.Query()
+	offset_str := q.Get("offset")
+	if offset_str != "" {
+		offset, err = strconv.ParseUint(offset_str, 0, 64)
+		if err != nil {
+			err = fmt.Errorf("could not parse offset URI: %s: %v", offset_str, err)
+			return
+		}
+	}
+
+	size_str := q.Get("size")
+	if size_str != "" {
+		size, err = strconv.ParseUint(size_str, 0, 64)
+		if err != nil {
+			err = fmt.Errorf("could not parse size URI: %s: %v", size_str, err)
+			return
+		}
+	}
+
+	return offset, size, nil
+}
+
 func (bctl *BucketCtl) GetBucket() (bucket *Bucket) {
 	sum := 0.0
 	for _, b := range bctl.Bucket {
@@ -394,7 +420,13 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 	s.SetGroups(bucket.Meta.Groups)
 	s.SetTimeout(100)
 
-	reply, err = bucket.lookup_serialize(true, s.WriteData(key, req.Body, 0, total_size))
+	offset, _, err := URIOffsetSize(req)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, fmt.Sprintf("upload: %v", err))
+		return
+	}
+
+	reply, err = bucket.lookup_serialize(true, s.WriteData(key, req.Body, offset, total_size))
 	return
 }
 
@@ -440,7 +472,13 @@ func (bctl *BucketCtl) Get(bname, key string, req *http.Request) (resp []byte, e
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.Meta.Groups)
 
-	for rd := range s.ReadData(key, 0, 0) {
+	offset, size, err := URIOffsetSize(req)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, fmt.Sprintf("get: %v", err))
+		return
+	}
+
+	for rd := range s.ReadData(key, offset, size) {
 		err = rd.Error()
 		if err != nil {
 			err = errors.NewKeyErrorFromEllipticsError(rd.Error(), req.URL.String(),
@@ -464,7 +502,7 @@ func (bctl *BucketCtl) Stream(bname, key string, w http.ResponseWriter, req *htt
 	err = bucket.check_auth(req, BucketAuthEmpty)
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), errors.ErrorStatus(err),
-			fmt.Sprintf("upload: %s", errors.ErrorData(err)))
+			fmt.Sprintf("stream: %s", errors.ErrorData(err)))
 		return
 	}
 
@@ -479,34 +517,15 @@ func (bctl *BucketCtl) Stream(bname, key string, w http.ResponseWriter, req *htt
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.Meta.Groups)
 
-	var offset, size uint64
-	offset = 0
-	size = 0
-
-	q := req.URL.Query()
-	offset_str := q.Get("offset")
-	if offset_str != "" {
-		offset, err = strconv.ParseUint(offset_str, 0, 64)
-		if err != nil {
-			err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
-				fmt.Sprintf("stream: could not parse offset URI: %s: %v", offset_str, err))
-			return
-		}
-	}
-
-	size_str := q.Get("size")
-	if size_str != "" {
-		size, err = strconv.ParseUint(size_str, 0, 64)
-		if err != nil {
-			err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
-				fmt.Sprintf("stream: could not parse size URI: %s: %v", size_str, err))
-			return
-		}
+	offset, size, err := URIOffsetSize(req)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, fmt.Sprintf("stream: %v", err))
+		return
 	}
 
 	err = s.StreamHTTP(key, offset, size, w)
 	if err != nil {
-		err = errors.NewKeyErrorFromEllipticsError(err, req.URL.String(), "get: could not stream data")
+		err = errors.NewKeyErrorFromEllipticsError(err, req.URL.String(), "stream: could not stream data")
 		return
 	}
 
