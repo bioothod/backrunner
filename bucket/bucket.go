@@ -479,9 +479,34 @@ func (bctl *BucketCtl) Stream(bname, key string, w http.ResponseWriter, req *htt
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.Meta.Groups)
 
-	err = s.StreamHTTP(key, 0, 0, w)
+	var offset, size uint64
+	offset = 0
+	size = 0
+
+	q := req.URL.Query()
+	offset_str := q.Get("offset")
+	if offset_str != "" {
+		offset, err = strconv.ParseUint(offset_str, 0, 64)
+		if err != nil {
+			err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
+				fmt.Sprintf("stream: could not parse offset URI: %s: %v", offset_str, err))
+			return
+		}
+	}
+
+	size_str := q.Get("size")
+	if size_str != "" {
+		size, err = strconv.ParseUint(size_str, 0, 64)
+		if err != nil {
+			err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
+				fmt.Sprintf("stream: could not parse size URI: %s: %v", size_str, err))
+			return
+		}
+	}
+
+	err = s.StreamHTTP(key, offset, size, w)
 	if err != nil {
-		err = errors.NewKeyErrorFromEllipticsError(err, req.URL.String(), "get: could not read data")
+		err = errors.NewKeyErrorFromEllipticsError(err, req.URL.String(), "get: could not stream data")
 		return
 	}
 
