@@ -61,6 +61,7 @@ func (bt *BackrunnerTest) StartElliptics() {
 		Blob_Flags uint32
 		Blob_Size string
 		Records_In_Blob string
+		Blob_Size_Limit string
 	}
 	type Config struct {
 		Logger Logger
@@ -120,8 +121,9 @@ func (bt *BackrunnerTest) StartElliptics() {
 			Data: fmt.Sprintf("%s/%d/data/data", bt.base, id),
 			Sync: -1,
 			Blob_Flags: 0,
-			Blob_Size: "100M",
+			Blob_Size: "20M",
 			Records_In_Blob: "1000",
+			Blob_Size_Limit: "100M",
 		}
 
 		err = os.MkdirAll(backend.History, 0755)
