@@ -2,7 +2,9 @@ package btest
 
 import (
 	"bytes"
+	cryptorand "crypto/rand"
 	"encoding/json"
+	"encoding/hex"
 	"fmt"
 	"github.com/bioothod/backrunner/auth"
 	"github.com/bioothod/backrunner/bucket"
@@ -101,7 +103,7 @@ func (t *BackrunnerTest) check_upload_reply(bucket, key string, resp *http.Respo
 	return nil
 }
 
-func (t *BackrunnerTest) NewRequest(method, handler, user, token, bucket, key string, body io.Reader) *http.Request {
+func (t *BackrunnerTest) NewRequest(method, handler, user, token, bucket, key string, offset, size uint64, body io.Reader) *http.Request {
 	url := fmt.Sprintf("http://%s/%s", t.remote, handler)
 
 	if bucket != "" {
@@ -114,6 +116,18 @@ func (t *BackrunnerTest) NewRequest(method, handler, user, token, bucket, key st
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		log.Fatal("Could not create request: method: %s, url: '%s': %v\n", method, url, err)
+	}
+
+	if offset != 0 || size != 0 {
+		q := req.URL.Query()
+		if offset != 0 {
+			q.Set("offset", strconv.FormatUint(offset, 10))
+		}
+		if size != 0 {
+			q.Set("size", strconv.FormatUint(size, 10))
+		}
+
+		req.URL.RawQuery = q.Encode()
 	}
 
 	if user != "" && token != "" {
@@ -129,11 +143,15 @@ func (t *BackrunnerTest) NewRequest(method, handler, user, token, bucket, key st
 	return req
 }
 
+func (t *BackrunnerTest) NewEmptyRequest(method, handler, user, token, bucket, key string) *http.Request {
+	return t.NewRequest(method, handler, user, token, bucket, key, 0, 0, bytes.NewReader([]byte{}))
+}
+
 func (t *BackrunnerTest) NewCheckRequest(method, handler, user, token string, status int) *CheckRequest {
 	body := bytes.NewReader(t.acl_buffer)
 
 	ret := &CheckRequest {
-		request: t.NewRequest(method, handler, user, token, t.acl_bucket, t.acl_key, body),
+		request: t.NewRequest(method, handler, user, token, t.acl_bucket, t.acl_key, 0, 0, body),
 		status: status,
 	}
 
@@ -294,6 +312,41 @@ func test_acl(t *BackrunnerTest) error {
 	return nil
 }
 
+func (t *BackrunnerTest) check_key_content(bucket, key string, offset, size uint64, content []byte) error {
+	req := t.NewRequest("GET", "get", t.all_allowed_user, t.all_allowed_token, bucket, key, offset, size, bytes.NewReader([]byte{}))
+
+	resp, err := t.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("check-content: url: %s: could not send get request: %v", req.URL.String(), err)
+	}
+	defer resp.Body.Close()
+
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("check-content: url: %s: could not read reply: %v", req.URL.String(), req.Header, err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("check-content: url: %s, returned status: %d, must be: %d, data: %s",
+			req.URL.String(), resp.StatusCode, http.StatusOK, string(data))
+	}
+
+	if !bytes.Equal(data, content) {
+		first := 0
+		last := 16
+		if last > len(content) {
+			last = len(content)
+		}
+
+		return fmt.Errorf("check-content: url: %s, different content: requested[%d:%d]: %s, len: %d, received: %s, len: %d",
+			req.URL.String(), first, last,
+			hex.Dump(data[first: last]), len(data),
+			hex.Dump(content[first: last]), len(content))
+	}
+
+	return nil
+}
+
 func test_big_bucket_upload(t *BackrunnerTest) error {
 	bucket := t.io_buckets[rand.Intn(len(t.io_buckets))]
 	key := strconv.FormatInt(rand.Int63(), 16)
@@ -301,16 +354,38 @@ func test_big_bucket_upload(t *BackrunnerTest) error {
 	// [20, 20+25) megabytes
 	total_size := 1024 * (rand.Int31n(25 * 1024) + 20 * 1024)
 	buf := make([]byte, total_size)
+	_, err := cryptorand.Read(buf)
+	if err != nil {
+		return fmt.Errorf("big-bucket-upload: could not read random data: %v", err)
+	}
+
 	body := bytes.NewReader(buf)
-	req := t.NewRequest("POST", "upload", t.all_allowed_user, t.all_allowed_token, bucket, key, body)
+	req := t.NewRequest("POST", "upload", t.all_allowed_user, t.all_allowed_token, bucket, key, 0, 0, body)
 
 	resp, err := t.client.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("big-bucket-upload: could not send upload request: %v", err)
 	}
 	defer resp.Body.Close()
 
-	return t.check_upload_reply(bucket, key, resp)
+	err = t.check_upload_reply(bucket, key, resp)
+	if err != nil {
+		return fmt.Errorf("big-bucket-upload: %v", err)
+	}
+
+	err = t.check_key_content(bucket, key, 0, uint64(total_size), buf)
+	if err != nil {
+		return fmt.Errorf("big-bucket-upload: full size: %d: %v", total_size, err)
+	}
+
+	offset := total_size / 2
+	size := total_size / 4
+	err = t.check_key_content(bucket, key, uint64(offset), uint64(size), buf[offset: offset + size])
+	if err != nil {
+		return fmt.Errorf("big-bucket-upload: offset: %d, size: %d, %v", offset, size, err)
+	}
+
+	return nil
 }
 
 func test_small_bucket_upload(t *BackrunnerTest) error {
@@ -320,16 +395,31 @@ func test_small_bucket_upload(t *BackrunnerTest) error {
 	// [1, 1+100) kbytes
 	total_size := 1024 * (rand.Int31n(100) + 1)
 	buf := make([]byte, total_size)
+	_, err := cryptorand.Read(buf)
+	if err != nil {
+		return fmt.Errorf("small-bucket-upload: could not read random data: %v", err)
+	}
+
 	body := bytes.NewReader(buf)
-	req := t.NewRequest("POST", "upload", t.all_allowed_user, t.all_allowed_token, bucket, key, body)
+	req := t.NewRequest("POST", "upload", t.all_allowed_user, t.all_allowed_token, bucket, key, 0, 0, body)
 
 	resp, err := t.client.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("small-bucket-upload: could not send upload request: %v", err)
 	}
 	defer resp.Body.Close()
 
-	return t.check_upload_reply(bucket, key, resp)
+	err = t.check_upload_reply(bucket, key, resp)
+	if err != nil {
+		return fmt.Errorf("small-bucket-upload: %v", err)
+	}
+
+	err = t.check_key_content(bucket, key, 0, uint64(total_size), buf)
+	if err != nil {
+		return fmt.Errorf("small-bucket-upload: %v", err)
+	}
+
+	return nil
 }
 
 func test_bucket_delete(t *BackrunnerTest) error {
@@ -340,7 +430,7 @@ func test_bucket_delete(t *BackrunnerTest) error {
 	total_size := 1024 * (rand.Int31n(100) + 1)
 	buf := make([]byte, total_size)
 	body := bytes.NewReader(buf)
-	req := t.NewRequest("POST", "upload", t.all_allowed_user, t.all_allowed_token, bucket, key, body)
+	req := t.NewRequest("POST", "upload", t.all_allowed_user, t.all_allowed_token, bucket, key, 0, 0, body)
 
 	resp, err := t.client.Do(req)
 	if err != nil {
@@ -353,7 +443,7 @@ func test_bucket_delete(t *BackrunnerTest) error {
 		return err
 	}
 
-	req = t.NewRequest("POST", "delete", t.all_allowed_user, t.all_allowed_token, bucket, key, body)
+	req = t.NewRequest("POST", "delete", t.all_allowed_user, t.all_allowed_token, bucket, key, 0, 0, body)
 	dresp, err := t.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("delete: url: %s: could not send delete request: %v", req.URL.String(), err.Error())
@@ -369,7 +459,7 @@ func test_bucket_delete(t *BackrunnerTest) error {
 		return fmt.Errorf("delete: url: %s: could not delete key: returned data: %s", req.URL.String(), string(data))
 	}
 
-	req = t.NewRequest("GET", "get", t.all_allowed_user, t.all_allowed_token, bucket, key, body)
+	req = t.NewEmptyRequest("GET", "get", t.all_allowed_user, t.all_allowed_token, bucket, key)
 	read, err := t.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("delete: url: %s: could not send final check request: %v", req.URL.String(), err.Error())
@@ -397,7 +487,7 @@ func test_bucket_bulk_delete(t *BackrunnerTest) error {
 		total_size := 1024 * (rand.Int31n(100) + 1)
 		buf := make([]byte, total_size)
 		body := bytes.NewReader(buf)
-		req := t.NewRequest("POST", "upload", t.all_allowed_user, t.all_allowed_token, bucket, key, body)
+		req := t.NewRequest("POST", "upload", t.all_allowed_user, t.all_allowed_token, bucket, key, 0, 0, body)
 
 		resp, err := t.client.Do(req)
 		if err != nil {
@@ -424,7 +514,7 @@ func test_bucket_bulk_delete(t *BackrunnerTest) error {
 		return fmt.Errorf("bulk-delete: could not marshal json: %v", err.Error())
 	}
 
-	req := t.NewRequest("POST", "bulk_delete", t.all_allowed_user, t.all_allowed_token, bucket, "", bytes.NewReader(data))
+	req := t.NewRequest("POST", "bulk_delete", t.all_allowed_user, t.all_allowed_token, bucket, "", 0, 0, bytes.NewReader(data))
 	dresp, err := t.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("bulk-delete: url: %s: could not send bulk delete request: %v", req.URL.String(), err.Error())
@@ -437,11 +527,12 @@ func test_bucket_bulk_delete(t *BackrunnerTest) error {
 	}
 
 	if dresp.StatusCode != http.StatusOK {
-		return fmt.Errorf("bulk-delete: url: %s: could not delete key: returned data: %s", req.URL.String(), string(data))
+		return fmt.Errorf("bulk-delete: url: %s: wrong status code: %d, must be %d, received data: %s",
+			req.URL.String(), dresp.StatusCode, http.StatusOK, string(data))
 	}
 
 	for _, key := range keys {
-		req = t.NewRequest("GET", "get", t.all_allowed_user, t.all_allowed_token, bucket, key, bytes.NewReader([]byte{}))
+		req = t.NewEmptyRequest("GET", "get", t.all_allowed_user, t.all_allowed_token, bucket, key)
 		read, err := t.client.Do(req)
 		if err != nil {
 			return fmt.Errorf("bulk-delete: url: %s: could not send final check request: %v", req.URL.String(), err.Error())
@@ -464,7 +555,7 @@ func test_nobucket_upload(t *BackrunnerTest) error {
 	total_size := 1024 * (rand.Int31n(100) + 1)
 	buf := make([]byte, total_size)
 	body := bytes.NewReader(buf)
-	req := t.NewRequest("POST", "nobucket_upload", t.all_allowed_user, t.all_allowed_token, "", key, body)
+	req := t.NewRequest("POST", "nobucket_upload", t.all_allowed_user, t.all_allowed_token, "", key, 0, 0, body)
 
 	resp, err := t.client.Do(req)
 	if err != nil {
