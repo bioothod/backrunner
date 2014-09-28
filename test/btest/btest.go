@@ -15,6 +15,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"reflect"
@@ -86,7 +87,7 @@ func (t *BackrunnerTest) check_upload_reply(bucket, key string, resp *http.Respo
 	}
 
 	if rep.Primary.Key != key {
-		return fmt.Errorf("invalid reply '%s': keys do not match: sent: %s, recv: %s", string(resp_data), key, rep.Primary.Key)
+		return fmt.Errorf("invalid reply '%s': keys do not match: sent: '%s', recv: '%s'", string(resp_data), key, rep.Primary.Key)
 	}
 
 	if rep.Bucket == "" {
@@ -390,7 +391,8 @@ func test_big_bucket_upload(t *BackrunnerTest) error {
 
 func test_small_bucket_upload(t *BackrunnerTest) error {
 	bucket := t.io_buckets[rand.Intn(len(t.io_buckets))]
-	key := strconv.FormatInt(rand.Int63(), 16)
+	key_orig := "тестовый ключ :.&*^//$@#qweqфывфв0x44"
+	key := url.QueryEscape(key_orig)
 
 	// [1, 1+100) kbytes
 	total_size := 1024 * (rand.Int31n(100) + 1)
@@ -409,7 +411,7 @@ func test_small_bucket_upload(t *BackrunnerTest) error {
 	}
 	defer resp.Body.Close()
 
-	err = t.check_upload_reply(bucket, key, resp)
+	err = t.check_upload_reply(bucket, key_orig, resp)
 	if err != nil {
 		return fmt.Errorf("small-bucket-upload: %v", err)
 	}
