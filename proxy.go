@@ -11,6 +11,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"runtime"
 	"strings"
 	"time"
@@ -331,15 +332,21 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 	}
 	need_flush := true
 
-	for k, v := range proxy_handlers {
-		if (strings.HasPrefix(req.URL.Path, k)) {
-			path := req.URL.Path[len(k):]
-			tmp := strings.SplitN(path, "/", v.params)
+	path, err := url.QueryUnescape(req.URL.Path)
+	if err != nil {
+		path = req.URL.Path
+		reply.err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, fmt.Sprintf("could not unescape URL: %v", err))
+	} else {
+		for k, v := range proxy_handlers {
+			if (strings.HasPrefix(path, k)) {
+				prefix := path[len(k):]
+				tmp := strings.SplitN(prefix, "/", v.params)
 
-			if len(tmp) >= v.params {
-				reply = v.function(w, req, tmp...)
-				need_flush = false
-				break
+				if len(tmp) >= v.params {
+					reply = v.function(w, req, tmp...)
+					need_flush = false
+					break
+				}
 			}
 		}
 	}
@@ -349,7 +356,7 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 		msg = reply.err.Error()
 	}
 
-	log.Printf("access_log: url: %s, status: %d, err: %v\n", req.URL.String(), reply.status, msg)
+	log.Printf("access_log: path: '%s', encoded-uri: '%s', status: %d, err: '%v'\n", path, req.URL.RequestURI(), reply.status, msg)
 
 	if need_flush {
 		http.Error(w, reply.err.Error(), http.StatusBadRequest)
