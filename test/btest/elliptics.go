@@ -120,7 +120,7 @@ func (bt *BackrunnerTest) StartElliptics() {
 			History: fmt.Sprintf("%s/%d/history", bt.base, id),
 			Data: fmt.Sprintf("%s/%d/data/data", bt.base, id),
 			Sync: -1,
-			Blob_Flags: 0,
+			Blob_Flags: 16, // bit 4 to enable blob-size-limit check
 			Blob_Size: "20M",
 			Records_In_Blob: "1000",
 			Blob_Size_Limit: "100M",
