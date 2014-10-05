@@ -57,6 +57,11 @@ type BucketMsgpack struct {
 	reserved    [3]uint64			`json:"-"`
 }
 
+func (meta *BucketMsgpack) String() string {
+	return fmt.Sprintf("%s: groups: %v, acl: %v, flags: 0x%x, max-size: %d, max-key-num: %d",
+		meta.Name, meta.Groups, meta.Acl, meta.Flags, meta.MaxSize, meta.MaxKeyNum)
+}
+
 func (meta *BucketMsgpack) PackMsgpack() (interface{}, error) {
 	var out []interface{} = make([]interface{}, 10, 10)
 
@@ -271,7 +276,7 @@ func (bucket *Bucket) lookup_serialize(write bool, ch <-chan elliptics.Lookuper)
 func ReadBucket(ell *etransport.Elliptics, name string) (bucket *Bucket, err error) {
 	ms, err := ell.MetadataSession()
 	if err != nil {
-		log.Printf("%s: could not create metadata session: %v", name, err)
+		log.Printf("read-bucket: %s: could not create metadata session: %v", name, err)
 		return
 	}
 
@@ -288,31 +293,30 @@ func ReadBucket(ell *etransport.Elliptics, name string) (bucket *Bucket, err err
 		if rd.Error() != nil {
 			err = rd.Error()
 
-			log.Printf("%s: could not read bucket metadata: %v", name, err)
+			log.Printf("read-bucket: %s: could not read bucket metadata: %v", name, err)
 			return
 		}
 
 		var out []interface{}
 		err = msgpack.Unmarshal([]byte(rd.Data()), &out)
 		if err != nil {
-			log.Printf("%s: could not parse bucket metadata: %v", name, err)
+			log.Printf("read-bucket: %s: could not parse bucket metadata: %v", name, err)
 			return
 		}
 
 		err = b.Meta.ExtractMsgpack(out)
 		if err != nil {
-			log.Printf("%s: unsupported msgpack data: %v", name, err)
+			log.Printf("read-bucket: %s: unsupported msgpack data: %v", name, err)
 			return
 		}
 
-		log.Printf("%s: groups: %v, acl: %v\n", b.Name, b.Meta.Groups, b.Meta.Acl)
 		bucket = b
 		return
 	}
 
 	bucket = nil
 	err = errors.NewKeyError(name, http.StatusNotFound,
-		"could not read bucket data: ReadData() returned nothing")
+		"read-bucket: could not read bucket data: ReadData() returned nothing")
 	return
 }
 
