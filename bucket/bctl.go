@@ -48,23 +48,24 @@ func URIOffsetSize(req *http.Request) (offset uint64, size uint64, err error) {
 type BucketCtl struct {
 	sync.RWMutex
 
-	bucket_path	string
-	e		*etransport.Elliptics
+	bucket_path		string
+	e			*etransport.Elliptics
 
-	signals		chan os.Signal
+	signals			chan os.Signal
 
-	Ticker		*time.Ticker
+	BucketTicker		*time.Ticker
+	BucketStatTicker	*time.Ticker
 
-	DnetStat	*elliptics.DnetStat
+	DnetStat		*elliptics.DnetStat
 
 	// buckets used for automatic write bucket selection,
 	// i.e. when client doesn't provide bucket name and we select it
 	// according to its performance and capacity
-	Bucket		[]*Bucket
+	Bucket			[]*Bucket
 
 	// buckets used by clients directly, i.e. when client explicitly says
 	// he wants to work with bucket named 'X'
-	BackBucket	[]*Bucket
+	BackBucket		[]*Bucket
 }
 
 func (bctl *BucketCtl) AllBuckets() []*Bucket {
@@ -427,9 +428,10 @@ func (bctl *BucketCtl) ReadConfig() error {
 		return err
 	}
 
-	bctl.Bucket = make([]*Bucket, 0, 0)
 	bctl.Lock()
 	defer bctl.Unlock()
+
+	bctl.Bucket = make([]*Bucket, 0, 0)
 
 	for _, name := range strings.Split(string(data), "\n") {
 		if len(name) > 0 {
@@ -453,14 +455,73 @@ func (bctl *BucketCtl) ReadConfig() error {
 	return nil
 }
 
+func (bctl *BucketCtl) ReadBucketsMetaNolock(buckets []*Bucket) (new_buckets []*Bucket, err error) {
+	new_buckets = make([]*Bucket, 0, len(buckets))
+
+	for _, b := range buckets {
+		rb, err := ReadBucket(bctl.e, b.Name)
+		if err != nil {
+			continue
+		}
+
+		new_buckets = append(new_buckets, rb)
+	}
+
+	if len(new_buckets) == 0 {
+		new_buckets = nil
+		err = fmt.Errorf("read-buckets-meta: could not read any bucket from %d requested", len(buckets))
+		return
+	}
+
+	return
+}
+
+func (bctl *BucketCtl) ReadAllBucketsMeta() (err error) {
+	var new_buckets, new_back_buckets []*Bucket
+
+	bctl.RLock()
+	if len(bctl.Bucket) != 0 {
+		new_buckets, err = bctl.ReadBucketsMetaNolock(bctl.Bucket)
+		if err != nil {
+			log.Printf("read-all-buckets-meta: could not read buckets: %v\n", err)
+		}
+	}
+
+	if len(bctl.BackBucket) != 0 {
+		new_back_buckets, err = bctl.ReadBucketsMetaNolock(bctl.BackBucket)
+		if err != nil {
+			log.Printf("read-all-buckets-meta: could not read back buckets: %v\n", err)
+		}
+	}
+	bctl.RUnlock()
+
+	bctl.Lock()
+	if new_buckets != nil {
+		bctl.Bucket = new_buckets
+	}
+
+	if new_back_buckets != nil {
+		bctl.BackBucket = new_back_buckets
+	}
+	bctl.Unlock()
+
+	bctl.BucketStatUpdate()
+
+	return nil
+}
+
 func NewBucketCtl(ell *etransport.Elliptics, bucket_path string) (bctl *BucketCtl, err error) {
 	bctl = &BucketCtl {
 		e:		ell,
 		bucket_path:	bucket_path,
 		signals:	make(chan os.Signal, 1),
 		DnetStat:	nil,
-		Ticker:		time.NewTicker(time.Second * 10),
+
 		Bucket:		make([]*Bucket, 0, 10),
+		BackBucket:	make([]*Bucket, 0, 10),
+
+		BucketTicker:	time.NewTicker(time.Second * 30),
+		BucketStatTicker:	time.NewTicker(time.Second * 5),
 	}
 
 	err = bctl.ReadConfig()
@@ -473,7 +534,10 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path string) (bctl *BucketCt
 	go func() {
 		for {
 			select {
-			case <-bctl.Ticker.C:
+			case <-bctl.BucketTicker.C:
+				bctl.ReadAllBucketsMeta()
+
+			case <-bctl.BucketStatTicker.C:
 				bctl.BucketStatUpdate()
 
 			case <-bctl.signals:
