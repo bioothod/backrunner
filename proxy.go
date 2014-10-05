@@ -326,6 +326,8 @@ var proxy_handlers = map[string]handler {
 func generic_handler(w http.ResponseWriter, req *http.Request) {
 	// join together sequential // in the URL path
 
+	start := time.Now()
+
 	reply := Reply {
 		status: http.StatusBadRequest,
 		err: errors.NewKeyError(req.URL.String(), http.StatusBadRequest, "there is no registered handler for this path"),
@@ -356,7 +358,8 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 		msg = reply.err.Error()
 	}
 
-	log.Printf("access_log: path: '%s', encoded-uri: '%s', status: %d, err: '%v'\n", path, req.URL.RequestURI(), reply.status, msg)
+	log.Printf("access_log: path: '%s', encoded-uri: '%s', status: %d, duration: %.3f ms, err: '%v'\n",
+		path, req.URL.RequestURI(), reply.status, float64(time.Since(start).Nanoseconds()) / 1000000.0, msg)
 
 	if need_flush {
 		http.Error(w, reply.err.Error(), http.StatusBadRequest)
