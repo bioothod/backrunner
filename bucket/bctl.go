@@ -10,9 +10,12 @@ import (
 	//"math"
 	"math/rand"
 	"net/http"
+	"os"
+	"os/signal"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -43,11 +46,15 @@ func URIOffsetSize(req *http.Request) (offset uint64, size uint64, err error) {
 }
 
 type BucketCtl struct {
+	sync.RWMutex
+
+	bucket_path	string
 	e		*etransport.Elliptics
+
+	signals		chan os.Signal
 
 	Ticker		*time.Ticker
 
-	sync.RWMutex
 	DnetStat	*elliptics.DnetStat
 
 	// buckets used for automatic write bucket selection,
@@ -110,7 +117,9 @@ func (bctl *BucketCtl) BucketStatUpdate() (err error) {
 			succeed_groups := make([]uint32, 0)
 			failed_groups := make([]uint32, 0)
 
+			buckets := 0
 			for _, b := range bctl.AllBuckets() {
+				buckets++
 				b.Group = make(map[uint32]*elliptics.StatGroup)
 
 				for _, group := range b.Meta.Groups {
@@ -125,8 +134,8 @@ func (bctl *BucketCtl) BucketStatUpdate() (err error) {
 			}
 
 			bctl.DnetStat = stat
-			log.Printf("bctl: stats have been updated: succeed-groups: %v, failed-gropus: %v\n",
-				succeed_groups, failed_groups)
+			log.Printf("bctl: stats have been updated: buckets: %d, succeed-groups: %v, failed-gropus: %v\n",
+				buckets, succeed_groups, failed_groups)
 		}
 	}
 
@@ -410,40 +419,67 @@ func (bctl *BucketCtl) Stat(req *http.Request) (reply map[string]interface{}, er
 	return
 }
 
-func NewBucketCtl(ell *etransport.Elliptics, bucket_path string) (bctl *BucketCtl, err error) {
-	bctl = &BucketCtl {
-		e:		ell,
-		DnetStat:	nil,
-		Ticker:		time.NewTicker(time.Second * 10),
-		Bucket:		make([]*Bucket, 0, 10),
+func (bctl *BucketCtl) ReadConfig() error {
+	data, err := ioutil.ReadFile(bctl.bucket_path)
+	if err != nil {
+		err = fmt.Errorf("Could not read bucket file '%s': %v", bctl.bucket_path, err)
+		log.Printf("config: %v\n", err)
+		return err
 	}
 
-	data, err := ioutil.ReadFile(bucket_path)
-	if err != nil {
-		return
-	}
+	bctl.Bucket = make([]*Bucket, 0, 0)
+	bctl.Lock()
+	defer bctl.Unlock()
 
 	for _, name := range strings.Split(string(data), "\n") {
 		if len(name) > 0 {
 			b, err := ReadBucket(bctl.e, name)
 			if err != nil {
-				log.Printf("bucket-ctl: could not read bucket: %s: %v\n", name, err)
+				log.Printf("config: could not read bucket: %s: %v\n", name, err)
 				continue
 			}
 
 			bctl.Bucket = append(bctl.Bucket, b)
+			log.Printf("config: new bucket: %s\n", b.Meta.String())
 		}
 	}
 
 	if len(bctl.Bucket) == 0 {
-		log.Fatal("No buckets found in bucket file")
+		err = fmt.Errorf("No buckets found in bucket file '%s'", bctl.bucket_path)
+		log.Printf("config: %v\n", err)
+		return err
 	}
 
+	return nil
+}
+
+func NewBucketCtl(ell *etransport.Elliptics, bucket_path string) (bctl *BucketCtl, err error) {
+	bctl = &BucketCtl {
+		e:		ell,
+		bucket_path:	bucket_path,
+		signals:	make(chan os.Signal, 1),
+		DnetStat:	nil,
+		Ticker:		time.NewTicker(time.Second * 10),
+		Bucket:		make([]*Bucket, 0, 10),
+	}
+
+	err = bctl.ReadConfig()
+	if err != nil {
+		return
+	}
 	bctl.BucketStatUpdate()
 
+	signal.Notify(bctl.signals, syscall.SIGHUP)
 	go func() {
-		for _ = range bctl.Ticker.C {
-			bctl.BucketStatUpdate()
+		for {
+			select {
+			case <-bctl.Ticker.C:
+				bctl.BucketStatUpdate()
+
+			case <-bctl.signals:
+				bctl.ReadConfig()
+				bctl.BucketStatUpdate()
+			}
 		}
 	}()
 
