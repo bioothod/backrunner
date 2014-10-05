@@ -12,11 +12,12 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"math"
+	//"math"
 	"math/rand"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -55,7 +56,7 @@ type BucketMsgpack struct {
 	Version     int32			`json:"-"`
 	Name        string			`json:"-"`
 	Acl         map[string]BucketACL	`json:"-"`
-	Groups      []int32			`json:"groups"`
+	Groups      []uint32			`json:"groups"`
 	Flags       uint64			`json:"flags"`
 	MaxSize     uint64			`json:"max-size"`
 	MaxKeyNum   uint64			`json:"max-key-num"`
@@ -136,7 +137,7 @@ func (meta *BucketMsgpack) ExtractMsgpack(out []interface{}) (err error) {
 	}
 
 	for _, x := range out[3].([]interface{}) {
-		meta.Groups = append(meta.Groups, int32(x.(int64)))
+		meta.Groups = append(meta.Groups, uint32(x.(int64)))
 	}
 	meta.Flags = uint64(out[4].(int64))
 	meta.MaxSize = uint64(out[5].(int64))
@@ -149,57 +150,43 @@ func (meta *BucketMsgpack) ExtractMsgpack(out []interface{}) (err error) {
 	return nil
 }
 
-type Backend struct {
-	Server	string
-	Id	int
-	Time    time.Time
-}
-
-type Group struct {
-	Backend		[]Backend
-}
-
 type Bucket struct {
 	Name	string
-	Groups	map[int]Group
+	Group	map[uint32]*elliptics.StatGroup
 
 	Meta	BucketMsgpack
-
-	RPS	float64
-	BPS	float64
 
 	Time    time.Time
 }
 
 func (b *Bucket) Stat() (reply map[string]interface{}, err error) {
 	reply = make(map[string]interface{})
-	reply["meta"] = b.Meta
 
 	g := make(map[string]interface{})
-	for idx, group := range b.Groups {
-		g[strconv.Itoa(idx)] = group
+	for group, stat := range b.Group {
+		g[fmt.Sprintf("%d", group)] = stat.StatGroupData()
 	}
 	reply["groups"] = g
-	reply["rps"] = b.RPS
-	reply["bps"] = b.BPS
+	reply["meta"] = b.Meta
+
 	err = nil
 	return
 }
 
-func NewBackend(server string, id int) Backend {
-	return Backend {
-		Id:		id,
-		Server:		server,
-		Time:		time.Now(),
-	}
-}
-
 type BucketCtl struct {
-	e	*etransport.Elliptics
-	Bucket	[]*Bucket
+	e		*etransport.Elliptics
+
+	Ticker		*time.Ticker
+
+	sync.RWMutex
+	DnetStat	*elliptics.DnetStat
+	Bucket		[]*Bucket
 }
 
 func (bctl *BucketCtl) FindBucket(name string) (bucket *Bucket, err error) {
+	bctl.RLock()
+	defer bctl.RUnlock()
+
 	for _, b := range bctl.Bucket {
 		if b.Name == name {
 			bucket = b
@@ -211,6 +198,50 @@ func (bctl *BucketCtl) FindBucket(name string) (bucket *Bucket, err error) {
 	bucket = nil
 	err = fmt.Errorf("%s: could not find bucket", name)
 	return
+}
+
+func (bctl *BucketCtl) BucketStatUpdate() (err error) {
+	stat, err := bctl.e.Stat()
+	if err != nil {
+		return err
+	}
+
+	if bctl.DnetStat != stat {
+		bctl.Lock()
+		defer bctl.Unlock()
+
+		if bctl.DnetStat != stat {
+			succeed_groups := make([]uint32, 0)
+			failed_groups := make([]uint32, 0)
+
+			for _, b := range bctl.Bucket {
+				b.Group = make(map[uint32]*elliptics.StatGroup)
+
+				for _, group := range b.Meta.Groups {
+					sg, ok := stat.Group[group]
+					if !ok {
+						failed_groups = append(failed_groups, group)
+					} else {
+						b.Group[group] = sg
+						succeed_groups = append(succeed_groups, group)
+					}
+				}
+			}
+
+			bctl.DnetStat = stat
+			log.Printf("bctl: stats have been updated: succeed-groups: %v, failed-gropus: %v\n",
+				succeed_groups, failed_groups)
+		}
+	}
+
+	return
+}
+
+func (bctl *BucketCtl) GetBucket() (bucket *Bucket) {
+	bctl.RLock()
+	defer bctl.RUnlock()
+
+	return bctl.Bucket[rand.Intn(len(bctl.Bucket))]
 }
 
 func URIOffsetSize(req *http.Request) (offset uint64, size uint64, err error) {
@@ -237,47 +268,6 @@ func URIOffsetSize(req *http.Request) (offset uint64, size uint64, err error) {
 	}
 
 	return offset, size, nil
-}
-
-func (bctl *BucketCtl) GetBucket() (bucket *Bucket) {
-	sum := 0.0
-	for _, b := range bctl.Bucket {
-		sum += b.BPS
-	}
-
-	if sum < 1 {
-		return bctl.Bucket[rand.Intn(len(bctl.Bucket))]
-	}
-
-	r := rand.Int63n(int64(sum))
-	for _, b := range bctl.Bucket {
-		r -= int64(b.BPS)
-		if r < 0 {
-			return b
-		}
-	}
-
-	// error, should never reach this point
-	return bctl.Bucket[rand.Intn(len(bctl.Bucket))]
-}
-
-func MovingExpAvg(value, oldValue, fdtime, ftime float64) float64 {
-	alpha := 1.0 - math.Exp(-fdtime/ftime)
-	r := alpha*value + (1.0-alpha)*oldValue
-	return r
-}
-
-func (bucket *Bucket) UpdateRate(size uint64) {
-	t := time.Now()
-	diff := t.Sub(bucket.Time).Seconds()
-	bucket.BPS = MovingExpAvg(float64(size), bucket.BPS, float64(diff), 1.0)
-	bucket.RPS = MovingExpAvg(1, bucket.RPS, float64(diff), 1.0)
-
-	bucket.Time = t
-}
-
-func (bucket *Bucket) HalfRate() {
-	bucket.UpdateRate(0)
 }
 
 func (b *Bucket) check_auth(r *http.Request, required_flags uint64) (err error) {
@@ -351,9 +341,6 @@ func (bucket *Bucket) lookup_serialize(write bool, ch <-chan elliptics.Lookuper)
 			egroups = append(egroups, l.Cmd().ID.Group)
 
 			ret["error"] = fmt.Sprintf("%v", l.Error())
-			if write {
-				bucket.HalfRate()
-			}
 			err = l.Error()
 		} else {
 			sgroups = append(sgroups, l.Cmd().ID.Group)
@@ -365,10 +352,6 @@ func (bucket *Bucket) lookup_serialize(write bool, ch <-chan elliptics.Lookuper)
 			ret["offset-within-data-file"] = l.Info().Offset
 			ret["mtime"] = l.Info().Mtime.String()
 			ret["server"] = l.StorageAddr().String()
-
-			if write {
-				bucket.UpdateRate(l.Info().Size)
-			}
 		}
 
 
@@ -637,6 +620,10 @@ func (bctl *BucketCtl) Stat(req *http.Request) (reply map[string]interface{}, er
 	reply = make(map[string]interface{})
 
 	buckets := make(map[string]interface{})
+
+	bctl.RLock()
+	defer bctl.RUnlock()
+
 	for _, b := range bctl.Bucket {
 		buckets[b.Name], err = b.Stat()
 		if err != nil {
@@ -648,18 +635,7 @@ func (bctl *BucketCtl) Stat(req *http.Request) (reply map[string]interface{}, er
 		}
 	}
 
-	storage := make(map[string]interface{})
-	groups, err := bctl.e.Stat()
-	if err != nil {
-		groups = err_struct {
-			Error: err.Error(),
-		}
-		err = nil
-	}
-
-	storage["groups"] = groups
 	reply["buckets"] = buckets
-	reply["storage"] = storage
 
 	return
 }
@@ -675,10 +651,8 @@ func ReadBucket(ell *etransport.Elliptics, name string) (bucket *Bucket, err err
 
 	b := &Bucket {
 		Name:		name,
-		Groups:		make(map[int]Group),
+		Group:		make(map[uint32]*elliptics.StatGroup),
 
-		RPS:		0,
-		BPS:		0,
 		Time:		time.Now(),
 	}
 
@@ -708,6 +682,7 @@ func ReadBucket(ell *etransport.Elliptics, name string) (bucket *Bucket, err err
 		return
 	}
 
+	bucket = nil
 	err = errors.NewKeyError(name, http.StatusNotFound,
 		"could not read bucket data: ReadData() returned nothing")
 	return
@@ -745,10 +720,8 @@ func WriteBucket(ell *etransport.Elliptics, meta *BucketMsgpack) (bucket *Bucket
 		bucket = &Bucket {
 			Meta:		*meta,
 			Name:		meta.Name,
-			Groups:		make(map[int]Group),
+			Group:		make(map[uint32]*elliptics.StatGroup),
 
-			RPS:		0,
-			BPS:		0,
 			Time:		time.Now(),
 		}
 
@@ -819,6 +792,8 @@ func WriteBucketJson(ell *etransport.Elliptics, name string, data []byte) (bucke
 func NewBucketCtl(ell *etransport.Elliptics, bucket_path string) (bctl *BucketCtl, err error) {
 	bctl = &BucketCtl {
 		e:		ell,
+		DnetStat:	nil,
+		Ticker:		time.NewTicker(time.Second * 10),
 		Bucket:		make([]*Bucket, 0, 10),
 	}
 
@@ -842,6 +817,14 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path string) (bctl *BucketCt
 	if len(bctl.Bucket) == 0 {
 		log.Fatal("No buckets found in bucket file")
 	}
+
+	bctl.BucketStatUpdate()
+
+	go func() {
+		for _ = range bctl.Ticker.C {
+			bctl.BucketStatUpdate()
+		}
+	}()
 
 	return bctl, nil
 }

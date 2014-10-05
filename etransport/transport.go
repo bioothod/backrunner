@@ -24,7 +24,7 @@ type Elliptics struct {
 	Log		*log.Logger
 
 	Node		*elliptics.Node
-	MetadataGroups	[]int32
+	MetadataGroups	[]uint32
 
 	prev_stat	*elliptics.DnetStat
 }
@@ -86,10 +86,10 @@ func (e *Elliptics) DataSession(req *http.Request) (s *elliptics.Session, err er
 	return
 }
 
-func (e *Elliptics) Stat() (reply interface{}, err error) {
+func (e *Elliptics) Stat() (stat *elliptics.DnetStat, err error) {
 	// this is kind of cache - we do not update statistics more frequently that 1 second
 	if e.prev_stat != nil && time.Since(e.prev_stat.Time).Seconds() <= 1.0 {
-		reply = e.prev_stat.StatData()
+		stat = e.prev_stat
 		return
 	}
 
@@ -98,10 +98,10 @@ func (e *Elliptics) Stat() (reply interface{}, err error) {
 		return
 	}
 
-	stat := s.DnetStat()
+	stat = s.DnetStat()
 	stat.Diff(e.prev_stat)
 	e.prev_stat = stat
-	reply = stat.StatData()
+
 	return
 }
 
@@ -156,7 +156,7 @@ func NewEllipticsTransport(config_file string) (e *Elliptics, err error) {
 	}
 
 	for _, m := range conf["metadata-groups"].([]interface{}) {
-		e.MetadataGroups = append(e.MetadataGroups, int32(m.(float64)))
+		e.MetadataGroups = append(e.MetadataGroups, uint32(m.(float64)))
 	}
 
 	err = e.Node.AddRemotes(remotes)
