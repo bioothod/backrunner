@@ -180,24 +180,51 @@ type BucketCtl struct {
 
 	sync.RWMutex
 	DnetStat	*elliptics.DnetStat
+
+	// buckets used for automatic write bucket selection,
+	// i.e. when client doesn't provide bucket name and we select it
+	// according to its performance and capacity
 	Bucket		[]*Bucket
+
+	// buckets used by clients directly, i.e. when client explicitly says
+	// he wants to work with bucket named 'X'
+	BackBucket	[]*Bucket
 }
 
-func (bctl *BucketCtl) FindBucket(name string) (bucket *Bucket, err error) {
+func (bctl *BucketCtl) AllBuckets() []*Bucket {
+	out := bctl.Bucket
+	return append(out, bctl.BackBucket...)
+}
+
+func (bctl *BucketCtl) FindBucketRO(name string) *Bucket {
 	bctl.RLock()
 	defer bctl.RUnlock()
 
-	for _, b := range bctl.Bucket {
+	for _, b := range bctl.AllBuckets() {
 		if b.Name == name {
-			bucket = b
-			err = nil
-			return
+			return b
 		}
 	}
 
-	bucket = nil
-	err = fmt.Errorf("%s: could not find bucket", name)
-	return
+	return nil
+}
+
+func (bctl *BucketCtl) FindBucket(name string) (bucket *Bucket, err error) {
+	bucket = bctl.FindBucketRO(name)
+	if bucket == nil {
+		b, err := ReadBucket(bctl.e, name)
+		if err != nil {
+			return nil, fmt.Errorf("%s: could not find and read bucket: %v", name, err.Error())
+		}
+
+		bctl.Lock()
+		defer bctl.Unlock()
+
+		bctl.BackBucket = append(bctl.BackBucket, b)
+		bucket = b
+	}
+
+	return bucket, nil
 }
 
 func (bctl *BucketCtl) BucketStatUpdate() (err error) {
@@ -214,7 +241,7 @@ func (bctl *BucketCtl) BucketStatUpdate() (err error) {
 			succeed_groups := make([]uint32, 0)
 			failed_groups := make([]uint32, 0)
 
-			for _, b := range bctl.Bucket {
+			for _, b := range bctl.AllBuckets() {
 				b.Group = make(map[uint32]*elliptics.StatGroup)
 
 				for _, group := range b.Meta.Groups {
@@ -624,7 +651,7 @@ func (bctl *BucketCtl) Stat(req *http.Request) (reply map[string]interface{}, er
 	bctl.RLock()
 	defer bctl.RUnlock()
 
-	for _, b := range bctl.Bucket {
+	for _, b := range bctl.AllBuckets() {
 		buckets[b.Name], err = b.Stat()
 		if err != nil {
 			buckets[b.Name] = err_struct {
