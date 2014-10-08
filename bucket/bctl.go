@@ -56,8 +56,6 @@ type BucketCtl struct {
 	BucketTicker		*time.Ticker
 	BucketStatTicker	*time.Ticker
 
-	DnetStat		*elliptics.DnetStat
-
 	// buckets used for automatic write bucket selection,
 	// i.e. when client doesn't provide bucket name and we select it
 	// according to its performance and capacity
@@ -110,35 +108,30 @@ func (bctl *BucketCtl) BucketStatUpdate() (err error) {
 		return err
 	}
 
-	if bctl.DnetStat != stat {
-		bctl.Lock()
-		defer bctl.Unlock()
+	bctl.Lock()
+	defer bctl.Unlock()
 
-		if bctl.DnetStat != stat {
-			succeed_groups := make([]uint32, 0)
-			failed_groups := make([]uint32, 0)
+	succeed_groups := make([]uint32, 0)
+	failed_groups := make([]uint32, 0)
 
-			buckets := 0
-			for _, b := range bctl.AllBuckets() {
-				buckets++
-				b.Group = make(map[uint32]*elliptics.StatGroup)
+	buckets := 0
+	for _, b := range bctl.AllBuckets() {
+		buckets++
+		b.Group = make(map[uint32]*elliptics.StatGroup)
 
-				for _, group := range b.Meta.Groups {
-					sg, ok := stat.Group[group]
-					if !ok {
-						failed_groups = append(failed_groups, group)
-					} else {
-						b.Group[group] = sg
-						succeed_groups = append(succeed_groups, group)
-					}
-				}
+		for _, group := range b.Meta.Groups {
+			sg, ok := stat.Group[group]
+			if !ok {
+				failed_groups = append(failed_groups, group)
+			} else {
+				b.Group[group] = sg
+				succeed_groups = append(succeed_groups, group)
 			}
-
-			bctl.DnetStat = stat
-			log.Printf("bctl: stats have been updated: buckets: %d, succeed-groups: %v, failed-gropus: %v\n",
-				buckets, succeed_groups, failed_groups)
 		}
 	}
+
+	log.Printf("bctl: stats have been updated: buckets: %d, succeeded-groups: %v, failed-gropus: %v\n",
+		buckets, succeed_groups, failed_groups)
 
 	return
 }
@@ -515,7 +508,6 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path string) (bctl *BucketCt
 		e:		ell,
 		bucket_path:	bucket_path,
 		signals:	make(chan os.Signal, 1),
-		DnetStat:	nil,
 
 		Bucket:		make([]*Bucket, 0, 10),
 		BackBucket:	make([]*Bucket, 0, 10),
