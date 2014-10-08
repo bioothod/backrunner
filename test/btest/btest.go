@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"syscall"
 	"time"
 	"reflect"
 	"runtime"
@@ -32,6 +33,9 @@ type CheckRequest struct {
 
 type BackrunnerTest struct {
 	base string
+
+	// file where all IO bucket names are stored, it is used by proxy
+	bucket_file string
 
 	server_cmd *exec.Cmd
 	proxy_cmd *exec.Cmd
@@ -754,11 +758,62 @@ func test_stats_update(t *BackrunnerTest) error {
 	return nil
 }
 
+func test_bucket_file_update(t *BackrunnerTest) error {
+	bname := strconv.FormatInt(rand.Int63(), 16)
+	user := strconv.FormatInt(rand.Int63(), 16)
+	token := strconv.FormatInt(rand.Int63(), 16)
+
+	meta := bucket.BucketMsgpack {
+		Version: 1,
+		Name: bname,
+		Groups: t.groups,
+		Acl: make(map[string]bucket.BucketACL),
+	}
+	acl := bucket.BucketACL {
+		Version: 1,
+		User: user,
+		Token: token,
+		Flags: bucket.BucketAuthWrite,
+	}
+	meta.Acl[acl.User] = acl
+
+	_, err := bucket.WriteBucket(t.ell, &meta)
+	if err != nil {
+		log.Fatal("Could not upload bucket: %v", err)
+	}
+
+	bfile, err := os.OpenFile(t.bucket_file, os.O_RDWR | os.O_APPEND, 0660)
+	if err != nil {
+		return fmt.Errorf("Could not open bucket file '%s': %v", t.bucket_file, err)
+	}
+
+	fmt.Fprintf(bfile, "%s\n", bname)
+	bfile.Close()
+
+	t.proxy_cmd.Process.Signal(syscall.SIGHUP)
+
+	// wait for statistics to update
+	time.Sleep(6 * time.Second)
+
+	st, err := t.parse_stat()
+	if err != nil {
+		return err
+	}
+
+	_, ok := st.Buckets[bname]
+	if !ok {
+		return fmt.Errorf("There is no bucket '%s' in new stats", bname)
+	}
+
+	return nil
+}
+
 var tests = [](func(t *BackrunnerTest) error) {
 	test_nobucket_upload,
 	test_small_bucket_upload,
 	test_big_bucket_upload,
 	test_acl,
+	test_bucket_file_update,
 	test_stats_update,
 	test_bucket_delete,
 	test_bucket_bulk_delete,

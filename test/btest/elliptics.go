@@ -197,10 +197,10 @@ func (bt *BackrunnerTest) Init(proxy_path string) {
 
 	bt.remote = fmt.Sprintf("localhost:%d", rand.Int31n(5000) + 60000)
 
-	bucket_file := fmt.Sprintf("%s/buckets", bt.base)
-	fd, err := os.Create(bucket_file)
+	bt.bucket_file = fmt.Sprintf("%s/buckets", bt.base)
+	fd, err := os.Create(bt.bucket_file)
 	if err != nil {
-		log.Fatalf("Could not create bucket file %s: %v\n", bucket_file, err)
+		log.Fatalf("Could not create bucket file %s: %v\n", bt.bucket_file, err)
 	}
 	defer fd.Close()
 
@@ -259,7 +259,7 @@ func (bt *BackrunnerTest) Init(proxy_path string) {
 		log.Fatalf("Could not write file '%s': %v", file, err)
 	}
 
-	cmd := exec.Command(proxy_path, "-config", file, "-buckets", bucket_file, "-listen", bt.remote)
+	cmd := exec.Command(proxy_path, "-config", file, "-buckets", bt.bucket_file, "-listen", bt.remote)
 	err = cmd.Start()
 	if err != nil {
 		log.Fatalf("Could not start proxy process: %v\n", err)
