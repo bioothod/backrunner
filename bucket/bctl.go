@@ -172,6 +172,7 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 		return
 	}
 
+	s.SetFilter(elliptics.SessionFilterAll)
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.Meta.Groups)
 	s.SetTimeout(100)
