@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"time"
 	"reflect"
 	"runtime"
 	"strconv"
@@ -398,7 +399,7 @@ func (t *BackrunnerTest) upload_get_helper(bucket, key_orig, user, token string)
 	buf := make([]byte, total_size)
 	_, err := cryptorand.Read(buf)
 	if err != nil {
-		return fmt.Errorf("small-bucket-upload: could not read random data: %v", err)
+		return fmt.Errorf("upload-get-helper: could not read random data: %v", err)
 	}
 
 	body := bytes.NewReader(buf)
@@ -406,18 +407,18 @@ func (t *BackrunnerTest) upload_get_helper(bucket, key_orig, user, token string)
 
 	resp, err := t.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("small-bucket-upload: could not send upload request: %v", err)
+		return fmt.Errorf("update-get-helper: could not send upload request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	err = t.check_upload_reply(bucket, key_orig, resp)
 	if err != nil {
-		return fmt.Errorf("small-bucket-upload: %v", err)
+		return fmt.Errorf("upload-get-helper: %v", err)
 	}
 
 	err = t.check_key_content(bucket, key, user, token, 0, uint64(total_size), buf)
 	if err != nil {
-		return fmt.Errorf("small-bucket-upload: %v", err)
+		return fmt.Errorf("upload-get-helper: %v", err)
 	}
 
 	return nil
@@ -578,6 +579,7 @@ func test_bucket_update(t *BackrunnerTest) error {
 	bname := strconv.FormatInt(rand.Int63(), 16)
 	user := strconv.FormatInt(rand.Int63(), 16)
 	token := strconv.FormatInt(rand.Int63(), 16)
+	key := "bucket-update-test"
 
 	meta := bucket.BucketMsgpack {
 		Version: 1,
@@ -601,7 +603,55 @@ func test_bucket_update(t *BackrunnerTest) error {
 	// bucket has been uploaded into the storage,
 	// let's check that reading/writing from that bucket succeeds
 
-	return t.upload_get_helper(bname, "test", user, token)
+	err = t.upload_get_helper(bname, key, user, token)
+	if err != nil {
+		return err
+	}
+
+	// update ACL
+	new_token := strconv.FormatInt(rand.Int63(), 16)
+	acl = bucket.BucketACL {
+		Version: 1,
+		User: user,
+		Token: new_token,
+		Flags: bucket.BucketAuthWrite,
+	}
+	meta.Acl[acl.User] = acl
+
+	_, err = bucket.WriteBucket(t.ell, &meta)
+	if err != nil {
+		log.Fatal("Could not upload bucket: %v", err)
+	}
+
+	// trying to read data using old token, it should fail with 403 error
+	req := t.NewEmptyRequest("GET", "get", user, new_token, bname, key)
+
+	resp, err := t.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("test_bucket_update: url: %s: could not send get request: %v", req.URL.String(), err)
+	}
+	defer resp.Body.Close()
+
+	_, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("test_bucket_update: url: %s: could not read reply: %v", req.URL.String(), req.Header, err)
+	}
+
+	if resp.StatusCode != http.StatusForbidden {
+		return fmt.Errorf("test_bucket_update: url: %s, returned status: %d, must be: %d",
+			req.URL.String(), resp.StatusCode, http.StatusForbidden)
+	}
+
+	// wait for ACL to update, it should be updated once per 30 seconds or so
+	time.Sleep(32 * time.Second)
+
+	// trying to update key using new token
+	err = t.upload_get_helper(bname, "some another key", user, new_token)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 var tests = [](func(t *BackrunnerTest) error) {
