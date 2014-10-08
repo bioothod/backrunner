@@ -10,6 +10,7 @@ import (
 	"github.com/bioothod/backrunner/bucket"
 	"github.com/bioothod/backrunner/etransport"
 	"github.com/bioothod/backrunner/reply"
+	"github.com/bioothod/elliptics-go/elliptics"
 	"io"
 	"io/ioutil"
 	"log"
@@ -654,11 +655,111 @@ func test_bucket_update(t *BackrunnerTest) error {
 	return nil
 }
 
+type StatAB struct {
+	Address		string
+	Backend		int32
+	Stat		*elliptics.StatBackend
+
+}
+type BStat struct {
+	Groups		map[string][]StatAB			`json:"groups"`
+	Meta		bucket.BucketMsgpack			`json:"meta"`
+}
+type Stat struct {
+	Buckets		map[string]BStat		`json:"buckets"`
+}
+
+func (t *BackrunnerTest) parse_stat() (*Stat, error) {
+	req := t.NewEmptyRequest("GET", "stat/", t.all_allowed_user, t.all_allowed_token, "", "")
+
+	resp, err := t.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("parse_stats: url: %s: could not send get request: %v", req.URL.String(), err)
+	}
+	defer resp.Body.Close()
+
+	stat_data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse_stats: url: %s: could not read reply: %v", req.URL.String(), req.Header, err)
+	}
+
+	var st Stat
+	err = json.Unmarshal(stat_data, &st)
+	if err != nil {
+		return nil, fmt.Errorf("parse_stats: could not parse json statistics '%s': %v",
+			string(stat_data), err)
+	}
+
+	log.Printf("stat: '%s'\n", string(stat_data))
+
+	return &st, nil
+}
+
+func (st *Stat) total_operations(bname, command string) uint64 {
+	var operations uint64 = 0
+
+	bucket, ok := st.Buckets[bname]
+	if ok {
+		for _, group := range bucket.Groups {
+			for _, ab := range group {
+				cmd, ok := ab.Stat.Commands[command]
+				if ok {
+					operations += cmd.RequestsSuccess
+				}
+			}
+		}
+	}
+
+	return operations
+}
+
+func test_stats_update(t *BackrunnerTest) error {
+	// sleep for bucket statistics to settle from previous tests, it is periodic
+	time.Sleep(6 * time.Second)
+
+	st1, err := t.parse_stat()
+	if err != nil {
+		return err
+	}
+
+	num := rand.Intn(1000) + 1000
+
+	bucket := t.io_buckets[rand.Intn(len(t.io_buckets))]
+	for i := 0; i < num; i++ {
+		key := fmt.Sprintf("some key %d", i)
+		err = t.upload_get_helper(bucket, key, t.all_allowed_user, t.all_allowed_token)
+		if err != nil {
+			return err
+		}
+	}
+
+	// sleep for bucket statistics to update current operations, it is periodic
+	time.Sleep(6 * time.Second)
+
+	st2, err := t.parse_stat()
+	if err != nil {
+		return err
+	}
+
+	cmd := "WRITE"
+	st2_num := st2.total_operations(bucket, cmd)
+	st1_num := st1.total_operations(bucket, cmd)
+	diff := st2_num - st1_num
+
+	if diff != uint64(num) {
+		return fmt.Errorf("operation counter differs: diff: %d (%d - %d), must be: %d",
+			diff, st2_num, st1_num, num)
+	}
+
+	return nil
+}
+
 var tests = [](func(t *BackrunnerTest) error) {
 	test_nobucket_upload,
 	test_small_bucket_upload,
 	test_big_bucket_upload,
 	test_acl,
+	test_stats_update,
 	test_bucket_delete,
 	test_bucket_bulk_delete,
 	test_bucket_update,
