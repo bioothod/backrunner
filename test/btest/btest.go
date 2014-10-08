@@ -865,7 +865,10 @@ func Start(base, proxy_path string) {
 	bt.Init(proxy_path)
 
 	for _, t := range tests {
+		log.Printf("TEST-START: %s\n", FunctionName(t))
 		err := t(bt)
+		log.Printf("TEST-COMPLETE: %s: %s\n", FunctionName(t), TestResult(err))
+
 		fmt.Printf("%s: %s\n", FunctionName(t), TestResult(err))
 
 		if err != nil {
