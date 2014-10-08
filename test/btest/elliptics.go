@@ -54,7 +54,7 @@ func (bt *BackrunnerTest) StartElliptics() {
 	type Backend struct {
 		Backend_ID uint32
 		Type string
-		Group int32
+		Group uint32
 		History string
 		Data string
 		Sync int
@@ -168,7 +168,7 @@ func (bt *BackrunnerTest) Init(proxy_path string) {
 		LogLevel string		`json:"log-level"`
 		LogPrefix string	`json:"log-prefix"`
 		Remote []string		`json:"remote"`
-		MetadataGroups []int32	`json:"metadata-groups"`
+		MetadataGroups []uint32	`json:"metadata-groups"`
 	}
 
 	config := ProxyConfig {
@@ -218,7 +218,7 @@ func (bt *BackrunnerTest) Init(proxy_path string) {
 		meta := bucket.BucketMsgpack {
 			Version: 1,
 			Name: b,
-			Groups: []int32{g},
+			Groups: []uint32{g},
 			Acl: make(map[string]bucket.BucketACL),
 		}
 

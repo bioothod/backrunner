@@ -48,7 +48,7 @@ type BackrunnerTest struct {
 	// test bucket with wide variety of ACLs
 	acl_bucket string
 
-	groups []int32
+	groups []uint32
 
 	// test key used to for reading/writing/deleting ACL checks
 	// it is first uploaded via Elliptics API in every ACL test,
@@ -313,8 +313,8 @@ func test_acl(t *BackrunnerTest) error {
 	return nil
 }
 
-func (t *BackrunnerTest) check_key_content(bucket, key string, offset, size uint64, content []byte) error {
-	req := t.NewRequest("GET", "get", t.all_allowed_user, t.all_allowed_token, bucket, key, offset, size, bytes.NewReader([]byte{}))
+func (t *BackrunnerTest) check_key_content(bucket, key, user, token string, offset, size uint64, content []byte) error {
+	req := t.NewRequest("GET", "get", user, token, bucket, key, offset, size, bytes.NewReader([]byte{}))
 
 	resp, err := t.client.Do(req)
 	if err != nil {
@@ -374,14 +374,15 @@ func test_big_bucket_upload(t *BackrunnerTest) error {
 		return fmt.Errorf("big-bucket-upload: %v", err)
 	}
 
-	err = t.check_key_content(bucket, key, 0, uint64(total_size), buf)
+	err = t.check_key_content(bucket, key, t.all_allowed_user, t.all_allowed_token, 0, uint64(total_size), buf)
 	if err != nil {
 		return fmt.Errorf("big-bucket-upload: full size: %d: %v", total_size, err)
 	}
 
 	offset := total_size / 2
 	size := total_size / 4
-	err = t.check_key_content(bucket, key, uint64(offset), uint64(size), buf[offset: offset + size])
+	err = t.check_key_content(bucket, key, t.all_allowed_user, t.all_allowed_token,
+		uint64(offset), uint64(size), buf[offset: offset + size])
 	if err != nil {
 		return fmt.Errorf("big-bucket-upload: offset: %d, size: %d, %v", offset, size, err)
 	}
@@ -389,9 +390,7 @@ func test_big_bucket_upload(t *BackrunnerTest) error {
 	return nil
 }
 
-func test_small_bucket_upload(t *BackrunnerTest) error {
-	bucket := t.io_buckets[rand.Intn(len(t.io_buckets))]
-	key_orig := "тестовый ключ :.&*^//$@#qweqфывфв0x44"
+func (t *BackrunnerTest) upload_get_helper(bucket, key_orig, user, token string) error {
 	key := url.QueryEscape(key_orig)
 
 	// [1, 1+100) kbytes
@@ -403,7 +402,7 @@ func test_small_bucket_upload(t *BackrunnerTest) error {
 	}
 
 	body := bytes.NewReader(buf)
-	req := t.NewRequest("POST", "upload", t.all_allowed_user, t.all_allowed_token, bucket, key, 0, 0, body)
+	req := t.NewRequest("POST", "upload", user, token, bucket, key, 0, 0, body)
 
 	resp, err := t.client.Do(req)
 	if err != nil {
@@ -416,12 +415,19 @@ func test_small_bucket_upload(t *BackrunnerTest) error {
 		return fmt.Errorf("small-bucket-upload: %v", err)
 	}
 
-	err = t.check_key_content(bucket, key, 0, uint64(total_size), buf)
+	err = t.check_key_content(bucket, key, user, token, 0, uint64(total_size), buf)
 	if err != nil {
 		return fmt.Errorf("small-bucket-upload: %v", err)
 	}
 
 	return nil
+}
+
+func test_small_bucket_upload(t *BackrunnerTest) error {
+	bucket := t.io_buckets[rand.Intn(len(t.io_buckets))]
+	key := "тестовый ключ :.&*^//$@#qweqфывфв0x44"
+
+	return t.upload_get_helper(bucket, key, t.all_allowed_user, t.all_allowed_token)
 }
 
 func test_bucket_delete(t *BackrunnerTest) error {
@@ -568,6 +574,35 @@ func test_nobucket_upload(t *BackrunnerTest) error {
 	return t.check_upload_reply("", key, resp)
 }
 
+func test_bucket_update(t *BackrunnerTest) error {
+	bname := strconv.FormatInt(rand.Int63(), 16)
+	user := strconv.FormatInt(rand.Int63(), 16)
+	token := strconv.FormatInt(rand.Int63(), 16)
+
+	meta := bucket.BucketMsgpack {
+		Version: 1,
+		Name: bname,
+		Groups: t.groups,
+		Acl: make(map[string]bucket.BucketACL),
+	}
+	acl := bucket.BucketACL {
+		Version: 1,
+		User: user,
+		Token: token,
+		Flags: bucket.BucketAuthWrite,
+	}
+	meta.Acl[acl.User] = acl
+
+	_, err := bucket.WriteBucket(t.ell, &meta)
+	if err != nil {
+		log.Fatal("Could not upload bucket: %v", err)
+	}
+
+	// bucket has been uploaded into the storage,
+	// let's check that reading/writing from that bucket succeeds
+
+	return t.upload_get_helper(bname, "test", user, token)
+}
 
 var tests = [](func(t *BackrunnerTest) error) {
 	test_nobucket_upload,
@@ -576,6 +611,7 @@ var tests = [](func(t *BackrunnerTest) error) {
 	test_acl,
 	test_bucket_delete,
 	test_bucket_bulk_delete,
+	test_bucket_update,
 }
 
 func FunctionName(i interface{}) string {
@@ -596,7 +632,7 @@ func Start(base, proxy_path string) {
 		remote:	"",
 		client: &http.Client{},
 		ell: nil,
-		groups: []int32{1,2,3},
+		groups: []uint32{1,2,3},
 		acl_bucket: strconv.FormatInt(rand.Int63(), 16),
 		acl_key: strconv.FormatInt(rand.Int63(), 16),
 		acl_buffer: make([]byte, 1024),
