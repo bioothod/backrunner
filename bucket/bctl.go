@@ -56,6 +56,8 @@ type BucketCtl struct {
 	BucketTicker		*time.Ticker
 	BucketStatTicker	*time.Ticker
 
+	StatTime		time.Time
+
 	// buckets used for automatic write bucket selection,
 	// i.e. when client doesn't provide bucket name and we select it
 	// according to its performance and capacity
@@ -110,6 +112,8 @@ func (bctl *BucketCtl) BucketStatUpdate() (err error) {
 
 	bctl.Lock()
 	defer bctl.Unlock()
+
+	bctl.StatTime = stat.Time
 
 	succeed_groups := make([]uint32, 0)
 	failed_groups := make([]uint32, 0)
@@ -409,6 +413,7 @@ func (bctl *BucketCtl) Stat(req *http.Request) (reply map[string]interface{}, er
 		}
 	}
 
+	reply["stat_time"] = bctl.StatTime.String()
 	reply["buckets"] = buckets
 
 	return
