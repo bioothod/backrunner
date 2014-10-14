@@ -130,7 +130,7 @@ func (bt *BackrunnerTest) StartElliptics() {
 			Blob_Flags: 16, // bit 4 to enable blob-size-limit check
 			Blob_Size: "20M",
 			Records_In_Blob: "1000",
-			Blob_Size_Limit: "100M",
+			Blob_Size_Limit: "40M",
 		}
 
 		err = os.MkdirAll(backend.History, 0755)
