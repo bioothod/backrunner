@@ -809,6 +809,7 @@ func test_bucket_file_update(t *BackrunnerTest) error {
 }
 
 var tests = [](func(t *BackrunnerTest) error) {
+	TestBackendStatusUpdate,
 	test_nobucket_upload,
 	test_small_bucket_upload,
 	test_big_bucket_upload,
