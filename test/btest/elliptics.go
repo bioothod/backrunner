@@ -20,10 +20,14 @@ func (bt *BackrunnerTest) StartElliptics() {
 		Type string
 		Pattern string
 	}
+	type Rotation struct {
+		Move int
+	}
 	type Sink struct {
 		Type string
 		Path string
 		AutoFlush bool
+		Rotation Rotation
 	}
 	type Frontend struct {
 		Formatter Formatter
@@ -82,6 +86,9 @@ func (bt *BackrunnerTest) StartElliptics() {
 						Type: "files",
 						Path: fmt.Sprintf("%s/server.log", bt.base),
 						AutoFlush: true,
+						Rotation: Rotation {
+							Move: 0,
+							},
 					},
 				},
 			},
