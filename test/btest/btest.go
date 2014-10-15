@@ -957,7 +957,6 @@ func Start(base, proxy_path string) {
 
 	rand.Seed(3)
 
-	bt.StartElliptics()
 	defer func() {
 		bt.server_cmd.Process.Signal(os.Interrupt)
 		bt.proxy_cmd.Process.Signal(os.Interrupt)
@@ -969,7 +968,8 @@ func Start(base, proxy_path string) {
 		log.Printf("proxy process exited: %v", err)
 	}()
 
-	bt.Init(proxy_path)
+	bt.StartEllipticsServer()
+	bt.StartEllipticsClientProxy(proxy_path)
 
 	for _, t := range tests {
 		log.Printf("TEST-START: %s\n", FunctionName(t))

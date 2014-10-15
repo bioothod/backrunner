@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-func (bt *BackrunnerTest) StartElliptics() {
+func (bt *BackrunnerTest) StartEllipticsServer() {
 	type Formatter struct {
 		Type string
 		Pattern string
@@ -169,7 +169,7 @@ func (bt *BackrunnerTest) StartElliptics() {
 	bt.server_cmd = cmd
 }
 
-func (bt *BackrunnerTest) Init(proxy_path string) {
+func (bt *BackrunnerTest) StartEllipticsClientProxy(proxy_path string) {
 	type ProxyConfig struct {
 		LogFile string		`json:"log-file"`
 		LogLevel string		`json:"log-level"`
