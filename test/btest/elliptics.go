@@ -170,7 +170,7 @@ func (bt *BackrunnerTest) StartEllipticsServer() {
 }
 
 func (bt *BackrunnerTest) StartEllipticsClientProxy(proxy_path string) {
-	type ProxyConfig struct {
+	type EllipticsConfig struct {
 		LogFile string		`json:"log-file"`
 		LogLevel string		`json:"log-level"`
 		LogPrefix string	`json:"log-prefix"`
@@ -178,12 +178,18 @@ func (bt *BackrunnerTest) StartEllipticsClientProxy(proxy_path string) {
 		MetadataGroups []uint32	`json:"metadata-groups"`
 	}
 
+	type ProxyConfig struct {
+		Elliptics EllipticsConfig	`json:"elliptics"`
+	}
+
 	config := ProxyConfig {
-		LogFile: fmt.Sprintf("%s/backrunner.log", bt.base),
-		LogLevel: "debug",
-		LogPrefix: "backrunner: ",
-		Remote: bt.elliptics_address,
-		MetadataGroups: bt.groups,
+		Elliptics: EllipticsConfig {
+			LogFile: fmt.Sprintf("%s/backrunner.log", bt.base),
+			LogLevel: "debug",
+			LogPrefix: "backrunner: ",
+			Remote: bt.elliptics_address,
+			MetadataGroups: bt.groups,
+		},
 	}
 
 	data, err := json.Marshal(&config)
@@ -248,11 +254,13 @@ func (bt *BackrunnerTest) StartEllipticsClientProxy(proxy_path string) {
 	bt.ACLInit()
 
 	config = ProxyConfig {
-		LogFile: fmt.Sprintf("%s/proxy.log", bt.base),
-		LogLevel: "debug",
-		LogPrefix: "proxy: ",
-		Remote: bt.elliptics_address,
-		MetadataGroups: bt.groups,
+		Elliptics: EllipticsConfig {
+			LogFile: fmt.Sprintf("%s/proxy.log", bt.base),
+			LogLevel: "debug",
+			LogPrefix: "proxy: ",
+			Remote: bt.elliptics_address,
+			MetadataGroups: bt.groups,
+		},
 	}
 
 	data, err = json.Marshal(&config)

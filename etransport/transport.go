@@ -127,6 +127,7 @@ func NewEllipticsTransport(config_file string) (e *Elliptics, err error) {
 		log.Fatalf("Could not parse config %s: %q", config_file, err)
 	}
 	conf := conf_interface.(map[string]interface{})
+	conf = conf["elliptics"].(map[string]interface{})
 
 	prefix := ""
 	if conf["log-prefix"] != nil {
