@@ -71,6 +71,15 @@ type BackrunnerTest struct {
 	// array of test buckets used for load balancing and IO tests
 	// each bucket matches one group in @groups
 	io_buckets []string
+
+	// uniform free space test will write data until elliptics returns error
+	// it should be 'no space' error
+	// proxy should write data uniformly among all buckets and backends
+	//
+	// this value will be specified in proxy config, it sets minimum ratio of free
+	// space for every backend, it is forbidden to write into backend if amount of free
+	// space will be less than this ratio
+	min_avail_space_ratio float64
 }
 
 func (t *BackrunnerTest) check_upload_reply(bucket, key string, resp *http.Response) error {
@@ -276,7 +285,7 @@ func (t *BackrunnerTest) ACLInit() error {
 
 	_, err := bucket.WriteBucket(t.ell, &meta)
 	if err != nil {
-		log.Fatal("Could not upload bucket: %v", err)
+		log.Fatalf("Could not upload bucket: %v", err)
 	}
 
 	return nil
@@ -580,6 +589,100 @@ func test_nobucket_upload(t *BackrunnerTest) error {
 	return t.check_upload_reply("", key, resp)
 }
 
+func test_uniform_free_space(t *BackrunnerTest) error {
+	key := strconv.FormatInt(rand.Int63(), 16)
+
+	// [1, 11+1) megabytes
+	total_size := 1024 * (rand.Int31n(1 * 1024) + 11 * 1024)
+	buf := make([]byte, total_size)
+	_, err := cryptorand.Read(buf)
+	if err != nil {
+		return fmt.Errorf("big-bucket-upload: could not read random data: %v", err)
+	}
+
+	for {
+		body := bytes.NewReader(buf)
+		req := t.NewRequest("POST", "nobucket_upload", t.all_allowed_user, t.all_allowed_token, "", key, 0, 0, body)
+
+		resp, err := t.client.Do(req)
+		if err != nil {
+			return fmt.Errorf("big-bucket-upload: could not send upload request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		resp_data, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("uniform-free-space: status: '%s', url: '%s', headers: req: %v, resp: %v, data-received: %s",
+				resp.Status, resp.Request.URL.String(), resp.Request.Header, resp.Header, string(resp_data))
+			break
+		}
+	}
+
+	// there should be no free space in any IO bucket, let's check it
+
+	// sleep for bucket statistics to settle from previous tests, it is periodic
+	time.Sleep(6 * time.Second)
+
+	st, err := t.parse_stat()
+	if err != nil {
+		return err
+	}
+
+	var min_rate float64 = 0
+	var max_rate float64 = 0
+
+	for _, bname := range t.io_buckets {
+		bucket, ok := st.Buckets[bname]
+		if !ok {
+			return fmt.Errorf("uniform-free-space: there is no IO bucket '%s' in the statistics, check out logs\n", bname)
+		}
+
+		for _, group := range bucket.Groups {
+			for _, ab := range group {
+				sb := ab.Stat
+				rate := float64(sb.VFS.TotalSizeLimit - sb.VFS.BackendUsedSize) / float64(sb.VFS.TotalSizeLimit)
+
+				if rate < min_rate || min_rate == 0 {
+					min_rate = rate
+				}
+
+				if rate > max_rate {
+					max_rate = rate
+				}
+			}
+		}
+	}
+
+	// we have minimum and maximum rate of free space among all backends.
+	// they should be 'similar', let's consider 10% as a fair 'similarity' check
+
+	max_diff := 1.1
+	if max_rate / min_rate > max_diff {
+		return fmt.Errorf("uniform-free-space: rate difference is too large: min: %f, max: %f, rate: %f, must be less than %f",
+			min_rate, max_rate, max_rate / min_rate, max_diff)
+	}
+
+	min_percentage := t.min_avail_space_ratio
+	max_percentage := t.min_avail_space_ratio * 2
+
+	// both min and max rate of available to total allowed space should be within 'safe harbour'
+
+	if max_rate > max_percentage || max_rate < min_percentage {
+		return fmt.Errorf("uniform-free-space: max rate %f is outside of the safe harbour of free space rate [%f, %f]",
+			max_rate, min_percentage, max_percentage)
+	}
+	if min_rate > max_percentage || min_rate < min_percentage {
+		return fmt.Errorf("uniform-free-space: min rate %f is outside of the safe harbour of free space rate [%f, %f]",
+			min_rate, min_percentage, max_percentage)
+	}
+
+	return nil
+}
+
 func test_bucket_update(t *BackrunnerTest) error {
 	bname := strconv.FormatInt(rand.Int63(), 16)
 	user := strconv.FormatInt(rand.Int63(), 16)
@@ -602,7 +705,7 @@ func test_bucket_update(t *BackrunnerTest) error {
 
 	_, err := bucket.WriteBucket(t.ell, &meta)
 	if err != nil {
-		log.Fatal("Could not upload bucket: %v", err)
+		log.Fatalf("Could not upload bucket: %v", err)
 	}
 
 	// bucket has been uploaded into the storage,
@@ -625,7 +728,7 @@ func test_bucket_update(t *BackrunnerTest) error {
 
 	_, err = bucket.WriteBucket(t.ell, &meta)
 	if err != nil {
-		log.Fatal("Could not upload bucket: %v", err)
+		log.Fatalf("Could not upload bucket: %v", err)
 	}
 
 	// trying to read data using old token, it should fail with 403 error
@@ -695,6 +798,7 @@ func (t *BackrunnerTest) parse_stat() (*Stat, error) {
 	}
 
 	log.Printf("stat: '%s'\n", string(stat_data))
+	ioutil.WriteFile(fmt.Sprintf("%s/last_stat.json", t.base), stat_data, 0644)
 
 	return &st, nil
 }
@@ -779,7 +883,7 @@ func test_bucket_file_update(t *BackrunnerTest) error {
 
 	_, err := bucket.WriteBucket(t.ell, &meta)
 	if err != nil {
-		log.Fatal("Could not upload bucket: %v", err)
+		log.Fatalf("Could not upload bucket: %v", err)
 	}
 
 	bfile, err := os.OpenFile(t.bucket_file, os.O_RDWR | os.O_APPEND, 0660)
@@ -819,6 +923,7 @@ var tests = [](func(t *BackrunnerTest) error) {
 	test_bucket_delete,
 	test_bucket_bulk_delete,
 	test_bucket_update,
+	test_uniform_free_space,
 }
 
 func FunctionName(i interface{}) string {
@@ -847,6 +952,7 @@ func Start(base, proxy_path string) {
 		all_allowed_user: "all-allowed-user",
 		all_allowed_token: "all-allowed-token",
 		io_buckets: make([]string, 0),
+		min_avail_space_ratio: 0.1,
 	}
 
 	rand.Seed(3)
