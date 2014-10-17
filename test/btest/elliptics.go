@@ -1,12 +1,10 @@
 package btest
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"github.com/bioothod/backrunner/bucket"
+	cnf "github.com/bioothod/backrunner/config"
 	"github.com/bioothod/backrunner/etransport"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"os"
@@ -16,85 +14,27 @@ import (
 )
 
 func (bt *BackrunnerTest) StartEllipticsServer() {
-	type Formatter struct {
-		Type string
-		Pattern string
-	}
-	type Rotation struct {
-		Move int
-	}
-	type Sink struct {
-		Type string
-		Path string
-		AutoFlush bool
-		Rotation Rotation
-	}
-	type Frontend struct {
-		Formatter Formatter
-		Sink Sink
-	}
-	type Logger struct {
-		Frontends []Frontend
-		Level string
-	}
-	type Monitor struct {
-		Port int32
-	}
-	type Options struct {
-		Join bool
-		Flags uint64
-		Remote []string
-		Address []string
-		Wait_Timeout uint64
-		Check_Timeout uint64
-		NonBlocking_IO_Thread_Num int
-		IO_Thread_Num int
-		Net_Thread_Num int
-		Daemon bool
-		Auth_Cookie string
-		Monitor Monitor
-	}
-
-	type Backend struct {
-		Backend_ID uint32
-		Type string
-		Group uint32
-		History string
-		Data string
-		Sync int
-		Blob_Flags uint32
-		Blob_Size string
-		Records_In_Blob string
-		Blob_Size_Limit string
-	}
-	type Config struct {
-		Logger Logger
-		Options Options
-		Backends []Backend
-
-	}
-
-	config := Config {
-		Logger: Logger {
-			Frontends: []Frontend {
-				Frontend {
-					Formatter: Formatter {
+	config := &cnf.EllipticsServerConfig {
+		Logger: cnf.Logger {
+			Frontends: []cnf.Frontend {
+				cnf.Frontend {
+					Formatter: cnf.Formatter {
 						Type: "string",
 						Pattern: "%(timestamp)s %(request_id)s/%(lwp)s/%(pid)s %(severity)s: %(message)s %(...L)s",
 					},
-					Sink: Sink {
+					Sink: cnf.Sink {
 						Type: "files",
 						Path: fmt.Sprintf("%s/server.log", bt.base),
 						AutoFlush: true,
-						Rotation: Rotation {
+						Rotation: cnf.Rotation {
 							Move: 0,
-							},
+						},
 					},
 				},
 			},
 			Level: "info",
 		},
-		Options: Options {
+		Options: cnf.Options {
 			Join: true,
 			Flags: 20,
 			Remote: []string {},
@@ -108,11 +48,11 @@ func (bt *BackrunnerTest) StartEllipticsServer() {
 			Net_Thread_Num: 1,
 			Daemon: false,
 			Auth_Cookie: fmt.Sprintf("%016x", rand.Int63()),
-			Monitor: Monitor {
+			Monitor: cnf.Monitor {
 				Port: rand.Int31n(20000) + 40000,
 			},
 		},
-		Backends: make([]Backend, 0),
+		Backends: make([]cnf.Backend, 0),
 	}
 
 	bt.elliptics_address = config.Options.Address
@@ -120,7 +60,7 @@ func (bt *BackrunnerTest) StartEllipticsServer() {
 	var err error
 	for i, g := range bt.groups {
 		id := uint32(i + 1)
-		backend := Backend {
+		backend := cnf.Backend {
 			Backend_ID: id,
 			Type: "blob",
 			Group: g,
@@ -129,7 +69,7 @@ func (bt *BackrunnerTest) StartEllipticsServer() {
 			Sync: -1,
 			Blob_Flags: 0, // bit 4 must not be set to enable blob-size-limit check
 			Blob_Size: "20M",
-			Records_In_Blob: "1000",
+			Records_In_Blob: 1000,
 			Blob_Size_Limit: fmt.Sprintf("%dM", 60 + rand.Intn(5) * 20),
 		}
 
@@ -146,15 +86,10 @@ func (bt *BackrunnerTest) StartEllipticsServer() {
 		config.Backends = append(config.Backends, backend)
 	}
 
-	data, err := json.Marshal(&config)
-	if err != nil {
-		log.Fatalf("Could not marshal elliptics config structure: %v", err)
-	}
-
 	file := fmt.Sprintf("%s/ioserv.conf", bt.base)
-	err = ioutil.WriteFile(file, bytes.ToLower(data), 0644)
+	err = config.Save(file)
 	if err != nil {
-		log.Fatalf("Could not write file '%s': %v", file, err)
+		log.Fatalf("Could not save config: %v", err)
 	}
 
 	cmd := exec.Command("dnet_ioserv", "-c", file)
@@ -170,20 +105,8 @@ func (bt *BackrunnerTest) StartEllipticsServer() {
 }
 
 func (bt *BackrunnerTest) StartEllipticsClientProxy(proxy_path string) {
-	type EllipticsConfig struct {
-		LogFile string		`json:"log-file"`
-		LogLevel string		`json:"log-level"`
-		LogPrefix string	`json:"log-prefix"`
-		Remote []string		`json:"remote"`
-		MetadataGroups []uint32	`json:"metadata-groups"`
-	}
-
-	type ProxyConfig struct {
-		Elliptics EllipticsConfig	`json:"elliptics"`
-	}
-
-	config := ProxyConfig {
-		Elliptics: EllipticsConfig {
+	config := &cnf.ProxyConfig {
+		Elliptics: cnf.EllipticsClientConfig {
 			LogFile: fmt.Sprintf("%s/backrunner.log", bt.base),
 			LogLevel: "debug",
 			LogPrefix: "backrunner: ",
@@ -192,15 +115,10 @@ func (bt *BackrunnerTest) StartEllipticsClientProxy(proxy_path string) {
 		},
 	}
 
-	data, err := json.Marshal(&config)
-	if err != nil {
-		log.Fatalf("Could not marshal elliptics transport config structure: %v", err)
-	}
-
 	file := fmt.Sprintf("%s/elliptics_transport.conf", bt.base)
-	err = ioutil.WriteFile(file, data, 0644)
+	err := config.Save(file)
 	if err != nil {
-		log.Fatalf("Could not write file '%s': %v", file, err)
+		log.Fatalf("Could not save client transport config: %v", err)
 	}
 
 	bt.ell, err = etransport.NewEllipticsTransport(file)
@@ -253,8 +171,8 @@ func (bt *BackrunnerTest) StartEllipticsClientProxy(proxy_path string) {
 
 	bt.ACLInit()
 
-	config = ProxyConfig {
-		Elliptics: EllipticsConfig {
+	config = &cnf.ProxyConfig {
+		Elliptics: cnf.EllipticsClientConfig {
 			LogFile: fmt.Sprintf("%s/proxy.log", bt.base),
 			LogLevel: "debug",
 			LogPrefix: "proxy: ",
@@ -263,15 +181,10 @@ func (bt *BackrunnerTest) StartEllipticsClientProxy(proxy_path string) {
 		},
 	}
 
-	data, err = json.Marshal(&config)
-	if err != nil {
-		log.Fatalf("Could not marshal proxy config structure: %v", err)
-	}
-
 	file = fmt.Sprintf("%s/proxy.conf", bt.base)
-	err = ioutil.WriteFile(file, data, 0644)
+	err = config.Save(file)
 	if err != nil {
-		log.Fatalf("Could not write file '%s': %v", file, err)
+		log.Fatalf("Could not save proxy config: %v", err)
 	}
 
 	cmd := exec.Command(proxy_path, "-config", file, "-buckets", bt.bucket_file, "-listen", bt.remote)

@@ -122,59 +122,46 @@ func NewEllipticsTransport(config_file string) (e *Elliptics, err error) {
 		prev_stat: nil,
 	}
 
-	conf_interface, err := config.Parse(config_file)
+	conf := &config.ProxyConfig {}
+	err = conf.Load(config_file)
 	if err != nil {
-		log.Fatalf("Could not parse config %s: %q", config_file, err)
-	}
-	conf := conf_interface.(map[string]interface{})
-	conf = conf["elliptics"].(map[string]interface{})
-
-	prefix := ""
-	if conf["log-prefix"] != nil {
-		prefix = conf["log-prefix"].(string)
+		log.Fatalf("Could not load config %s: %q", config_file, err)
 	}
 
-	if conf["log-file"] == nil || conf["log-level"] == nil {
+
+	if len(conf.Elliptics.LogFile) == 0 || len(conf.Elliptics.LogLevel) == 0 {
 		log.Fatal("'log-file' and 'log-level' config parameters must be set")
 	}
 
-	e.LogFile, err = os.OpenFile(conf["log-file"].(string), os.O_RDWR | os.O_APPEND | os.O_CREATE, 0644)
+	e.LogFile, err = os.OpenFile(conf.Elliptics.LogFile, os.O_RDWR | os.O_APPEND | os.O_CREATE, 0644)
 	if err != nil {
-		log.Fatalf("Could not open log file '%s': %q", conf["log-file"].(string), err)
+		log.Fatalf("Could not open log file '%s': %q", conf.Elliptics.LogFile, err)
 	}
 
-	e.Log = log.New(e.LogFile, fmt.Sprintf("elliptics: %s", prefix), log.LstdFlags | log.Lmicroseconds)
-	log.SetPrefix(prefix)
+	e.Log = log.New(e.LogFile, fmt.Sprintf("elliptics: %s", conf.Elliptics.LogPrefix), log.LstdFlags | log.Lmicroseconds)
+	log.SetPrefix(conf.Elliptics.LogPrefix)
 	log.SetOutput(e.LogFile)
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
-	e.Node, err = elliptics.NewNode(e.Log, conf["log-level"].(string))
+	e.Node, err = elliptics.NewNode(e.Log, conf.Elliptics.LogLevel)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 
-	if conf["remote"] == nil {
+	if len(conf.Elliptics.Remote) == 0 {
 		log.Fatal("'remote' config parameter must be set")
 	}
 
-	var remotes []string
-	for _, r := range conf["remote"].([]interface{}) {
-		remotes = append(remotes, r.(string))
-	}
-
-
-	if conf["metadata-groups"] == nil {
+	if len(conf.Elliptics.MetadataGroups) == 0 {
 		log.Fatal("'metadata-groups' config parameter must be set")
 	}
 
-	for _, m := range conf["metadata-groups"].([]interface{}) {
-		e.MetadataGroups = append(e.MetadataGroups, uint32(m.(float64)))
-	}
+	e.MetadataGroups = conf.Elliptics.MetadataGroups
 
-	err = e.Node.AddRemotes(remotes)
+	err = e.Node.AddRemotes(conf.Elliptics.Remote)
 	if err != nil {
-		log.Fatalf("Could not connect to any remote node from %q: %q", remotes, err)
+		log.Fatalf("Could not connect to any remote node from %q: %q", conf.Elliptics.Remote, err)
 	}
 
 	return
