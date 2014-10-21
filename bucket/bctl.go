@@ -52,10 +52,13 @@ type BucketCtl struct {
 	bucket_path		string
 	e			*etransport.Elliptics
 
+	proxy_config_path	string
+	conf			*config.ProxyConfig
+
 	signals			chan os.Signal
 
-	BucketTicker		*time.Ticker
-	BucketStatTicker	*time.Ticker
+	BucketTimer		*time.Timer
+	BucketStatTimer		*time.Timer
 
 	StatTime		time.Time
 
@@ -420,7 +423,7 @@ func (bctl *BucketCtl) Stat(req *http.Request) (reply map[string]interface{}, er
 	return
 }
 
-func (bctl *BucketCtl) ReadConfig() error {
+func (bctl *BucketCtl) ReadBucketConfig() error {
 	data, err := ioutil.ReadFile(bctl.bucket_path)
 	if err != nil {
 		err = fmt.Errorf("Could not read bucket file '%s': %v", bctl.bucket_path, err)
@@ -450,6 +453,36 @@ func (bctl *BucketCtl) ReadConfig() error {
 		err = fmt.Errorf("No buckets found in bucket file '%s'", bctl.bucket_path)
 		log.Printf("config: %v\n", err)
 		return err
+	}
+
+	return nil
+}
+
+func (bctl *BucketCtl) ReadProxyConfig() error {
+	conf := &config.ProxyConfig {}
+	err := conf.Load(bctl.proxy_config_path)
+	if err != nil {
+		return fmt.Errorf("could not load proxy config file '%s': %v", bctl.proxy_config_path, err)
+	}
+
+	bctl.Lock()
+	defer bctl.Unlock()
+
+	bctl.conf = conf
+
+	return nil
+
+}
+
+func (bctl *BucketCtl) ReadConfig() error {
+	err := bctl.ReadBucketConfig()
+	if err != nil {
+		return fmt.Errorf("failed to update bucket config: %v", err)
+	}
+
+	err = bctl.ReadProxyConfig()
+	if err != nil {
+		return fmt.Errorf("failed to update proxy config: %v", err)
 	}
 
 	return nil
@@ -510,17 +543,18 @@ func (bctl *BucketCtl) ReadAllBucketsMeta() (err error) {
 	return nil
 }
 
-func NewBucketCtl(ell *etransport.Elliptics, conf *config.ProxyConfig, bucket_path string) (bctl *BucketCtl, err error) {
+func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path string) (bctl *BucketCtl, err error) {
 	bctl = &BucketCtl {
-		e:		ell,
-		bucket_path:	bucket_path,
-		signals:	make(chan os.Signal, 1),
+		e:			ell,
+		bucket_path:		bucket_path,
+		proxy_config_path:	proxy_config_path,
+		signals:		make(chan os.Signal, 1),
 
-		Bucket:		make([]*Bucket, 0, 10),
-		BackBucket:	make([]*Bucket, 0, 10),
+		Bucket:			make([]*Bucket, 0, 10),
+		BackBucket:		make([]*Bucket, 0, 10),
 
-		BucketTicker:	time.NewTicker(time.Second * time.Duration(conf.Proxy.BucketUpdateInterval)),
-		BucketStatTicker:	time.NewTicker(time.Second * time.Duration(conf.Proxy.BucketStatUpdateInterval)),
+		BucketTimer:		time.NewTimer(time.Second * 30),
+		BucketStatTimer:	time.NewTimer(time.Second * 5),
 	}
 
 	err = bctl.ReadConfig()
@@ -533,11 +567,23 @@ func NewBucketCtl(ell *etransport.Elliptics, conf *config.ProxyConfig, bucket_pa
 	go func() {
 		for {
 			select {
-			case <-bctl.BucketTicker.C:
+			case <-bctl.BucketTimer.C:
 				bctl.ReadAllBucketsMeta()
 
-			case <-bctl.BucketStatTicker.C:
+				if bctl.conf.Proxy.BucketUpdateInterval > 0 {
+					bctl.RLock()
+					bctl.BucketTimer.Reset(time.Second * time.Duration(bctl.conf.Proxy.BucketUpdateInterval))
+					bctl.RUnlock()
+				}
+
+			case <-bctl.BucketStatTimer.C:
 				bctl.BucketStatUpdate()
+
+				if bctl.conf.Proxy.BucketStatUpdateInterval > 0 {
+					bctl.RLock()
+					bctl.BucketTimer.Reset(time.Second * time.Duration(bctl.conf.Proxy.BucketStatUpdateInterval))
+					bctl.RUnlock()
+				}
 
 			case <-bctl.signals:
 				bctl.ReadConfig()
