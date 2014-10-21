@@ -117,17 +117,10 @@ func (e *Elliptics) Stat() (stat *elliptics.DnetStat, err error) {
 	return
 }
 
-func NewEllipticsTransport(config_file string) (e *Elliptics, err error) {
+func NewEllipticsTransport(conf *config.ProxyConfig) (e *Elliptics, err error) {
 	e = &Elliptics {
 		prev_stat: nil,
 	}
-
-	conf := &config.ProxyConfig {}
-	err = conf.Load(config_file)
-	if err != nil {
-		log.Fatalf("Could not load config %s: %q", config_file, err)
-	}
-
 
 	if len(conf.Elliptics.LogFile) == 0 || len(conf.Elliptics.LogLevel) == 0 {
 		log.Fatal("'log-file' and 'log-level' config parameters must be set")

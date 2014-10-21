@@ -1,6 +1,7 @@
 package bucket
 
 import (
+	"github.com/bioothod/backrunner/config"
 	"github.com/bioothod/backrunner/errors"
 	"github.com/bioothod/backrunner/etransport"
 	"github.com/bioothod/elliptics-go/elliptics"
@@ -509,7 +510,7 @@ func (bctl *BucketCtl) ReadAllBucketsMeta() (err error) {
 	return nil
 }
 
-func NewBucketCtl(ell *etransport.Elliptics, bucket_path string) (bctl *BucketCtl, err error) {
+func NewBucketCtl(ell *etransport.Elliptics, conf *config.ProxyConfig, bucket_path string) (bctl *BucketCtl, err error) {
 	bctl = &BucketCtl {
 		e:		ell,
 		bucket_path:	bucket_path,
@@ -518,8 +519,8 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path string) (bctl *BucketCt
 		Bucket:		make([]*Bucket, 0, 10),
 		BackBucket:	make([]*Bucket, 0, 10),
 
-		BucketTicker:	time.NewTicker(time.Second * 30),
-		BucketStatTicker:	time.NewTicker(time.Second * 5),
+		BucketTicker:	time.NewTicker(time.Second * time.Duration(conf.Proxy.BucketUpdateInterval)),
+		BucketStatTicker:	time.NewTicker(time.Second * time.Duration(conf.Proxy.BucketStatUpdateInterval)),
 	}
 
 	err = bctl.ReadConfig()

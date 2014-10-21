@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/bioothod/backrunner/auth"
 	"github.com/bioothod/backrunner/bucket"
+	"github.com/bioothod/backrunner/config"
 	"github.com/bioothod/backrunner/etransport"
 	"github.com/bioothod/backrunner/reply"
 	"github.com/bioothod/elliptics-go/elliptics"
@@ -939,6 +940,7 @@ func TestResult(err error) string {
 }
 
 func Start(base, proxy_path string) {
+
 	bt := &BackrunnerTest {
 		base: base,
 		remote:	"",
@@ -969,7 +971,25 @@ func Start(base, proxy_path string) {
 	}()
 
 	bt.StartEllipticsServer()
-	bt.StartEllipticsClientProxy(proxy_path)
+
+	// create config after server has been started, since @elliptics_address array is filled
+	// from the server's config address
+	cnf := &config.ProxyConfig {
+		Elliptics: config.EllipticsClientConfig {
+			LogLevel: "debug",
+			Remote: bt.elliptics_address,
+			MetadataGroups: bt.groups,
+		},
+
+		Proxy: config.ProxyClientConfig {
+			IdleTimeout: 60,
+			MinAvailSpaceRatio: bt.min_avail_space_ratio,
+			BucketUpdateInterval: 20,
+			BucketStatUpdateInterval: 5,
+		},
+	}
+
+	bt.StartEllipticsClientProxy(proxy_path, cnf)
 
 	for _, t := range tests {
 		log.Printf("TEST-START: %s\n", FunctionName(t))

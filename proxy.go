@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/bioothod/backrunner/config"
 	"github.com/bioothod/backrunner/errors"
 	"github.com/bioothod/backrunner/bucket"
 	"github.com/bioothod/backrunner/etransport"
@@ -19,13 +20,13 @@ import (
 
 var (
 	proxy bproxy
-	IdleTimeout		= 150 * time.Second
 )
 
 type bproxy struct {
 	host		string
 	bctl		*bucket.BucketCtl
 	ell		*etransport.Elliptics
+	conf		*config.ProxyConfig
 }
 
 type Reply struct {
@@ -366,13 +367,13 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func getTimeoutServer(addr string, handler http.Handler) *http.Server {
+func (proxy *bproxy) getTimeoutServer(addr string, handler http.Handler) *http.Server {
 	//keeps people who are slow or are sending keep-alives from eating all our sockets
 	return &http.Server{
 		Addr:         addr,
 		Handler:      handler,
-		ReadTimeout:  IdleTimeout,
-		WriteTimeout: IdleTimeout,
+		ReadTimeout:  time.Duration(proxy.conf.Proxy.IdleTimeout) * time.Second,
+		WriteTimeout:  time.Duration(proxy.conf.Proxy.IdleTimeout) * time.Second,
 	}
 }
 
@@ -392,27 +393,33 @@ func main() {
 
 	listen := flag.String("listen", "0.0.0.0:9090", "listen and serve address")
 	buckets := flag.String("buckets", "", "buckets file (file format: new-line separated list of bucket names)")
-	config := flag.String("config", "", "Transport config file")
+	config_file := flag.String("config", "", "Transport config file")
 	flag.Parse()
 
 	if *buckets == "" {
 		log.Fatal("there is no buckets file")
 	}
 
-	if *config == "" {
+	if *config_file == "" {
 		log.Fatal("You must specify config file")
 	}
 
 	var err error
 
-	proxy.ell, err = etransport.NewEllipticsTransport(*config)
+	proxy.conf = &config.ProxyConfig {}
+	err = proxy.conf.Load(*config_file)
+	if err != nil {
+		log.Fatalf("Could not load config %s: %q", config_file, err)
+	}
+
+	proxy.ell, err = etransport.NewEllipticsTransport(proxy.conf)
 	if err != nil {
 		log.Fatalf("Could not create Elliptics transport: %v", err)
 	}
 
 	rand.Seed(9)
 
-	proxy.bctl, err = bucket.NewBucketCtl(proxy.ell, *buckets)
+	proxy.bctl, err = bucket.NewBucketCtl(proxy.ell, proxy.conf, *buckets)
 	if err != nil {
 		log.Fatalf("Could not process buckets file '%s': %v", *buckets, err)
 	}
@@ -420,7 +427,7 @@ func main() {
 	proxy.host = "localhost"
 
 
-	server := getTimeoutServer(*listen, http.HandlerFunc(generic_handler))
+	server := proxy.getTimeoutServer(*listen, http.HandlerFunc(generic_handler))
 
 	log.Fatal(server.ListenAndServe())
 }

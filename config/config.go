@@ -101,8 +101,23 @@ type EllipticsClientConfig struct {
 	MetadataGroups []uint32			`json:"metadata-groups"`
 }
 
+type ProxyClientConfig struct {
+	// http connection timeout in seconds
+	IdleTimeout int				`json:"idle-timeout"`
+
+	// minimum available free space ratio of bucket to be writable
+	MinAvailSpaceRatio float64		`json:"min-avail-space-ratio"`
+
+	// bucket metadata update time in seconds
+	BucketUpdateInterval int		`json:"bucket-update-interval"`
+
+	// bucket statistics update time in seconds
+	BucketStatUpdateInterval int		`json:"bucket-stat-update-interval"`
+}
+
 type ProxyConfig struct {
 	Elliptics EllipticsClientConfig		`json:"elliptics"`
+	Proxy ProxyClientConfig			`json:"proxy"`
 }
 
 func (config *ProxyConfig) Save(file string) (err error) {
