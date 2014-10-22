@@ -102,6 +102,7 @@ type EllipticsClientConfig struct {
 }
 
 type ProxyClientConfig struct {
+	Address string				`json:"address"`
 	// http connection timeout in seconds
 	IdleTimeout int				`json:"idle-timeout"`
 

@@ -23,7 +23,6 @@ var (
 )
 
 type bproxy struct {
-	host		string
 	bctl		*bucket.BucketCtl
 	ell		*etransport.Elliptics
 	conf		*config.ProxyConfig
@@ -63,7 +62,7 @@ func ping_handler(w http.ResponseWriter, r *http.Request, strings ...string) Rep
 }
 
 func (p *bproxy) local_url(key, bucket, operation string) string {
-	return fmt.Sprintf("http://%s/%s/%s/%s", p.host, operation, bucket, key)
+	return fmt.Sprintf("http://%s/%s/%s/%s", p.conf.Proxy.Address, operation, bucket, key)
 }
 
 func (p *bproxy) send_upload_reply(w http.ResponseWriter, req *http.Request,
@@ -391,7 +390,6 @@ func (str *stringslice) Set(value string) error {
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	listen := flag.String("listen", "0.0.0.0:9090", "listen and serve address")
 	buckets := flag.String("buckets", "", "buckets file (file format: new-line separated list of bucket names)")
 	config_file := flag.String("config", "", "Transport config file")
 	flag.Parse()
@@ -412,6 +410,10 @@ func main() {
 		log.Fatalf("Could not load config %s: %q", config_file, err)
 	}
 
+	if len(proxy.conf.Proxy.Address) == 0 {
+		log.Fatalf("'address' must be specified in proxy config '%s'\n", *config_file)
+	}
+
 	proxy.ell, err = etransport.NewEllipticsTransport(proxy.conf)
 	if err != nil {
 		log.Fatalf("Could not create Elliptics transport: %v", err)
@@ -424,10 +426,7 @@ func main() {
 		log.Fatalf("Could not process buckets file '%s': %v", *buckets, err)
 	}
 
-	proxy.host = "localhost"
-
-
-	server := proxy.getTimeoutServer(*listen, http.HandlerFunc(generic_handler))
+	server := proxy.getTimeoutServer(proxy.conf.Proxy.Address, http.HandlerFunc(generic_handler))
 
 	log.Fatal(server.ListenAndServe())
 }
