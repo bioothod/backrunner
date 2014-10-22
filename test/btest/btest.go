@@ -43,11 +43,11 @@ type BackrunnerTest struct {
 
 	elliptics_address []string
 
-	remote string
 	client *http.Client
 
 	ell *etransport.Elliptics
 
+	conf *config.ProxyConfig
 
 	// buffer used in ACL check requests, it is never freed
 	acl_buffer []byte
@@ -121,7 +121,7 @@ func (t *BackrunnerTest) check_upload_reply(bucket, key string, resp *http.Respo
 }
 
 func (t *BackrunnerTest) NewRequest(method, handler, user, token, bucket, key string, offset, size uint64, body io.Reader) *http.Request {
-	url := fmt.Sprintf("http://%s/%s", t.remote, handler)
+	url := fmt.Sprintf("http://%s/%s", t.conf.Proxy.Address, handler)
 
 	if bucket != "" {
 		url = fmt.Sprintf("%s/%s", url, bucket)
@@ -943,7 +943,6 @@ func Start(base, proxy_path string) {
 
 	bt := &BackrunnerTest {
 		base: base,
-		remote:	"",
 		client: &http.Client{},
 		ell: nil,
 		groups: []uint32{1,2,3},
@@ -974,7 +973,7 @@ func Start(base, proxy_path string) {
 
 	// create config after server has been started, since @elliptics_address array is filled
 	// from the server's config address
-	cnf := &config.ProxyConfig {
+	bt.conf = &config.ProxyConfig {
 		Elliptics: config.EllipticsClientConfig {
 			LogLevel: "debug",
 			Remote: bt.elliptics_address,
@@ -982,6 +981,7 @@ func Start(base, proxy_path string) {
 		},
 
 		Proxy: config.ProxyClientConfig {
+			Address: fmt.Sprintf("localhost:%d", rand.Int31n(5000) + 60000),
 			IdleTimeout: 60,
 			MinAvailSpaceRatio: bt.min_avail_space_ratio,
 			BucketUpdateInterval: 20,
@@ -989,7 +989,7 @@ func Start(base, proxy_path string) {
 		},
 	}
 
-	bt.StartEllipticsClientProxy(proxy_path, cnf)
+	bt.StartEllipticsClientProxy(proxy_path)
 
 	for _, t := range tests {
 		log.Printf("TEST-START: %s\n", FunctionName(t))

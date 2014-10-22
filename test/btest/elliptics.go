@@ -104,22 +104,20 @@ func (bt *BackrunnerTest) StartEllipticsServer() {
 	bt.server_cmd = cmd
 }
 
-func (bt *BackrunnerTest) StartEllipticsClientProxy(proxy_path string, config *cnf.ProxyConfig) {
-	config.Elliptics.LogFile = fmt.Sprintf("%s/backrunner.log", bt.base)
-	config.Elliptics.LogPrefix = "backrunner: "
+func (bt *BackrunnerTest) StartEllipticsClientProxy(proxy_path string) {
+	bt.conf.Elliptics.LogFile = fmt.Sprintf("%s/backrunner.log", bt.base)
+	bt.conf.Elliptics.LogPrefix = "backrunner: "
 
 	file := fmt.Sprintf("%s/elliptics_transport.conf", bt.base)
-	err := config.Save(file)
+	err := bt.conf.Save(file)
 	if err != nil {
 		log.Fatalf("Could not save client transport config: %v", err)
 	}
 
-	bt.ell, err = etransport.NewEllipticsTransport(config)
+	bt.ell, err = etransport.NewEllipticsTransport(bt.conf)
 	if err != nil {
 		log.Fatal("Could not connect to elliptics server %v: %v", bt.elliptics_address, err)
 	}
-
-	bt.remote = fmt.Sprintf("localhost:%d", rand.Int31n(5000) + 60000)
 
 	bt.bucket_file = fmt.Sprintf("%s/buckets", bt.base)
 	fd, err := os.Create(bt.bucket_file)
@@ -164,16 +162,16 @@ func (bt *BackrunnerTest) StartEllipticsClientProxy(proxy_path string, config *c
 
 	bt.ACLInit()
 
-	config.Elliptics.LogFile = fmt.Sprintf("%s/proxy.log", bt.base)
-	config.Elliptics.LogPrefix = "proxy: "
+	bt.conf.Elliptics.LogFile = fmt.Sprintf("%s/proxy.log", bt.base)
+	bt.conf.Elliptics.LogPrefix = "proxy: "
 
 	file = fmt.Sprintf("%s/proxy.conf", bt.base)
-	err = config.Save(file)
+	err = bt.conf.Save(file)
 	if err != nil {
 		log.Fatalf("Could not save proxy config: %v", err)
 	}
 
-	cmd := exec.Command(proxy_path, "-config", file, "-buckets", bt.bucket_file, "-listen", bt.remote)
+	cmd := exec.Command(proxy_path, "-config", file, "-buckets", bt.bucket_file)
 	err = cmd.Start()
 	if err != nil {
 		log.Fatalf("Could not start proxy process: %v\n", err)
