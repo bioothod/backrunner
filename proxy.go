@@ -285,40 +285,49 @@ func stat_handler(w http.ResponseWriter, req *http.Request, strings ...string) R
 
 type handler struct {
 	params			int // minimal number of path components after /handler/ needed to run this handler
+	methods			[]string // GET, POST and so on - methods which are allowed to be used with this handler
 	function		func(w http.ResponseWriter, req *http.Request, v...string) Reply
 }
 
 var proxy_handlers = map[string]handler {
 	"/nobucket_upload/" : {
 		params:	1,
+		methods: []string{"POST", "PUT"},
 		function: nobucket_upload_handler,
 	},
 	"/upload/" : {
 		params: 2,
+		methods: []string{"POST", "PUT"},
 		function: bucket_upload_handler,
 	},
 	"/get/" : {
 		params: 2,
+		methods: []string{"GET"},
 		function: get_handler,
 	},
 	"/lookup/" : {
 		params: 2,
+		methods: []string{"GET"},
 		function: lookup_handler,
 	},
 	"/delete/" : {
 		params: 2,
+		methods: []string{"POST", "PUT"},
 		function: delete_handler,
 	},
 	"/bulk_delete/" : {
 		params: 1,
+		methods: []string{"POST", "PUT"},
 		function: bulk_delete_handler,
 	},
 	"/ping/" : {
 		params: 0,
+		methods: []string{"GET"},
 		function: ping_handler,
 	},
 	"/stat/" : {
 		params: 0,
+		methods: []string{"GET"},
 		function: stat_handler,
 	},
 }
@@ -341,13 +350,23 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 	} else {
 		for k, v := range proxy_handlers {
 			if (strings.HasPrefix(path, k)) {
-				prefix := path[len(k):]
-				tmp := strings.SplitN(prefix, "/", v.params)
+				method_matched := false
+				for _, method := range v.methods {
+					if method == req.Method {
+						method_matched = true
+						break
+					}
+				}
 
-				if len(tmp) >= v.params {
-					reply = v.function(w, req, tmp...)
-					need_flush = false
-					break
+				if method_matched {
+					prefix := path[len(k):]
+					tmp := strings.SplitN(prefix, "/", v.params)
+
+					if len(tmp) >= v.params {
+						reply = v.function(w, req, tmp...)
+						need_flush = false
+						break
+					}
 				}
 			}
 		}
@@ -358,8 +377,8 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 		msg = reply.err.Error()
 	}
 
-	log.Printf("access_log: path: '%s', encoded-uri: '%s', status: %d, duration: %.3f ms, err: '%v'\n",
-		path, req.URL.RequestURI(), reply.status, float64(time.Since(start).Nanoseconds()) / 1000000.0, msg)
+	log.Printf("access_log: method: '%s', path: '%s', encoded-uri: '%s', status: %d, duration: %.3f ms, err: '%v'\n",
+		req.Method, path, req.URL.RequestURI(), reply.status, float64(time.Since(start).Nanoseconds()) / 1000000.0, msg)
 
 	if need_flush {
 		http.Error(w, reply.err.Error(), http.StatusBadRequest)
