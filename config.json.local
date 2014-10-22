@@ -1,0 +1,18 @@
+{
+	"elliptics": {
+		"log-file": "/dev/stdout",
+		"log-level": "info",
+		"log-prefix": "backrunner: ",
+		"remote": [
+			"localhost:1026:2"
+		],
+		"metadata-groups": [1,2]
+	},
+	"proxy": {
+		"address": "0.0.0.0:9090",
+		"idle-timeout": 60,
+		"min-avail-space-ratio": 0.2,
+		"bucket-update-interval": 30,
+		"bucket-stat-update-interval": 5
+	}
+}
