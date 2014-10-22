@@ -136,7 +136,7 @@ func (meta *BucketMsgpack) ExtractMsgpack(out []interface{}) (err error) {
 	}
 
 	for _, x := range out[3].([]interface{}) {
-		meta.Groups = append(meta.Groups, uint32(x.(int64)))
+		meta.Groups = append(meta.Groups, uint32(x.(uint64)))
 	}
 	meta.Flags = uint64(out[4].(int64))
 	meta.MaxSize = uint64(out[5].(int64))
@@ -392,7 +392,7 @@ func WriteBucketJson(ell *etransport.Elliptics, name string, data []byte) (bucke
 
 	for _, i := range imap["acl"].([]interface{}) {
 		acl := BucketACL {
-			Version: 1,
+			Version: 2,
 		}
 
 		x := i.(map[string]interface{})
