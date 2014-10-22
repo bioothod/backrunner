@@ -97,7 +97,23 @@ func (meta *BucketMsgpack) PackMsgpack() (interface{}, error) {
 	return out, nil
 }
 
+func cast_to_uint64(val interface{}) (uint64, bool) {
+	x, ok := val.(uint64)
+	if ok {
+		return x, ok
+	}
+
+	x1, ok := val.(int64)
+	if ok {
+		return uint64(x1), ok
+	}
+
+	return 0, false
+}
+
 func (meta *BucketMsgpack) ExtractMsgpack(out []interface{}) (err error) {
+	var ok bool
+
 	if len(out) < 10 {
 		return fmt.Errorf("array length: %d, must be at least 10", len(out))
 	}
@@ -111,7 +127,7 @@ func (meta *BucketMsgpack) ExtractMsgpack(out []interface{}) (err error) {
 	for _, i := range out[2].(map[interface{}]interface{}) {
 		x := i.([]interface{})
 		var acl BucketACL
-		if v, ok := x[0].(int64); ok {
+		if v, ok := cast_to_uint64(x[0]); ok {
 			acl.Version = int32(v)
 		} else {
 			return fmt.Errorf("acl: could not find version")
@@ -126,7 +142,7 @@ func (meta *BucketMsgpack) ExtractMsgpack(out []interface{}) (err error) {
 		} else {
 			return fmt.Errorf("acl: could not find token")
 		}
-		if v, ok := x[3].(int64); ok {
+		if v, ok := cast_to_uint64(x[3]); ok {
 			acl.Flags = uint64(v)
 		} else {
 			return fmt.Errorf("acl: could not find flags")
@@ -136,14 +152,30 @@ func (meta *BucketMsgpack) ExtractMsgpack(out []interface{}) (err error) {
 	}
 
 	for _, x := range out[3].([]interface{}) {
-		meta.Groups = append(meta.Groups, uint32(x.(uint64)))
+		g, ok := cast_to_uint64(x)
+		if !ok {
+			return fmt.Errorf("could not cast group '%v'", x)
+		}
+
+		meta.Groups = append(meta.Groups, uint32(g))
 	}
-	meta.Flags = uint64(out[4].(int64))
-	meta.MaxSize = uint64(out[5].(int64))
-	meta.MaxKeyNum = uint64(out[6].(int64))
+	meta.Flags, ok = cast_to_uint64(out[4])
+	if !ok {
+		return fmt.Errorf("could not cast flags '%v'", out[4])
+	}
+
+	meta.MaxSize, ok = cast_to_uint64(out[5])
+	if !ok {
+		return fmt.Errorf("could not cast max-size '%v'", out[5])
+	}
+
+	meta.MaxKeyNum, ok = cast_to_uint64(out[6])
+	if !ok {
+		return fmt.Errorf("could not cast max-key-num '%v'", out[6])
+	}
 
 	for i := range meta.reserved {
-		meta.reserved[i] = uint64(out[7 + i].(int64))
+		meta.reserved[i], _ = cast_to_uint64(out[7 + i])
 	}
 
 	return nil
