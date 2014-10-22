@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/bioothod/backrunner/bucket"
+	"github.com/bioothod/backrunner/config"
 	"github.com/bioothod/backrunner/etransport"
 	"io/ioutil"
 	"log"
@@ -11,7 +12,7 @@ import (
 
 func main() {
 	bname := flag.String("bucket", "", "bucket name to read or upload")
-	config := flag.String("config", "", "transport config file")
+	config_file := flag.String("config", "", "transport config file")
 	upload := flag.String("upload", "", "bucket json file to upload/rewrite")
 	flag.Parse()
 
@@ -19,11 +20,17 @@ func main() {
 		log.Fatal("there is no bucket")
 	}
 
-	if *config == "" {
+	if *config_file == "" {
 		log.Fatal("You must specify config file")
 	}
 
-	ell, err := etransport.NewEllipticsTransport(*config)
+	cnf := &config.ProxyConfig{}
+	err := cnf.Load(*config_file)
+	if err != nil {
+		log.Fatalf("Could not load config file '%s': %v", *config_file, err)
+	}
+
+	ell, err := etransport.NewEllipticsTransport(cnf)
 	if err != nil {
 		log.Fatalf("Could not create Elliptics transport: %v", err)
 	}
