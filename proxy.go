@@ -191,7 +191,7 @@ func redirect_handler(w http.ResponseWriter, req *http.Request, strings ...strin
 		}
 	}
 
-	srv := reply.Servers[0]
+	srv := reply.Servers[rand.Intn(len(reply.Servers))]
 	scheme := "http"
 	if req.URL.Scheme != "" {
 		scheme = req.URL.Scheme
