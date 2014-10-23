@@ -196,9 +196,26 @@ func redirect_handler(w http.ResponseWriter, req *http.Request, strings ...strin
 	if req.URL.Scheme != "" {
 		scheme = req.URL.Scheme
 	}
-	url_str := fmt.Sprintf("%s://%s:%d?file=%s&offset=%d&size=%d&time=%d",
+
+	if len(srv.Filename) == 0 {
+		err := errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
+			fmt.Sprintf("lookup returned invalid filename: %s", srv.Filename))
+
+		return Reply {
+			err: err,
+			status: errors.ErrorStatus(err),
+		}
+	}
+
+	slash := "/"
+	if srv.Filename[0] == '/' {
+		slash = ""
+	}
+
+	timestamp := time.Now().Unix()
+	url_str := fmt.Sprintf("%s://%s:%d%s%s:%d:%d",
 		scheme, srv.Server.HostString(), proxy.conf.Proxy.RedirectPort,
-		srv.Filename, srv.Offset, srv.Size, srv.Info.Mtime.Unix())
+		slash, srv.Filename, srv.Offset, srv.Size)
 
 	u, err := url.Parse(url_str)
 	if err != nil {
@@ -213,7 +230,13 @@ func redirect_handler(w http.ResponseWriter, req *http.Request, strings ...strin
 
 	req.URL = u
 
-	signature, err := auth.GenerateSignature(proxy.conf.Proxy.RedirectToken, "GET", req.URL, req.Header)
+	w.Header().Set("X-Ell-Mtime", fmt.Sprintf("%d", srv.Info.Mtime.Unix()))
+	w.Header().Set("X-Ell-Signtime", fmt.Sprintf("%d", timestamp))
+	w.Header().Set("X-Ell-Offset", fmt.Sprintf("%d", srv.Offset))
+	w.Header().Set("X-Ell-Size", fmt.Sprintf("%d", srv.Size))
+	w.Header().Set("X-Ell-File", srv.Filename)
+
+	signature, err := auth.GenerateSignature(proxy.conf.Proxy.RedirectToken, "GET", req.URL, w.Header())
 	if err != nil {
 		err := errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
 			fmt.Sprintf("could not generate signature for redirect url '%s': %v", url_str, err))
