@@ -232,6 +232,7 @@ func redirect_handler(w http.ResponseWriter, req *http.Request, strings ...strin
 
 	w.Header().Set("X-Ell-Mtime", fmt.Sprintf("%d", srv.Info.Mtime.Unix()))
 	w.Header().Set("X-Ell-Signtime", fmt.Sprintf("%d", timestamp))
+	w.Header().Set("X-Ell-SignatureTimeout", fmt.Sprintf("%d", proxy.conf.Proxy.RedirectSignatureTimeout))
 	w.Header().Set("X-Ell-Offset", fmt.Sprintf("%d", srv.Offset))
 	w.Header().Set("X-Ell-Size", fmt.Sprintf("%d", srv.Size))
 	w.Header().Set("X-Ell-File", srv.Filename)
