@@ -4,6 +4,7 @@ import (
 	"github.com/bioothod/backrunner/config"
 	"github.com/bioothod/backrunner/errors"
 	"github.com/bioothod/backrunner/etransport"
+	"github.com/bioothod/backrunner/reply"
 	"github.com/bioothod/elliptics-go/elliptics"
 	"fmt"
 	"io/ioutil"
@@ -151,7 +152,7 @@ func (bctl *BucketCtl) GetBucket() (bucket *Bucket) {
 	return bctl.Bucket[rand.Intn(len(bctl.Bucket))]
 }
 
-func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Request) (reply map[string]interface{}, err error) {
+func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Request) (reply *reply.LookupResult, err error) {
 	err = bucket.check_auth(req, BucketAuthWrite)
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), errors.ErrorStatus(err),
@@ -195,14 +196,14 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 	return
 }
 
-func (bctl *BucketCtl) Upload(key string, req *http.Request) (reply map[string]interface{}, bucket *Bucket, err error) {
+func (bctl *BucketCtl) Upload(key string, req *http.Request) (reply *reply.LookupResult, bucket *Bucket, err error) {
 	bucket = bctl.GetBucket()
 
 	reply, err = bctl.bucket_upload(bucket, key, req)
 	return
 }
 
-func (bctl *BucketCtl) BucketUpload(bucket_name, key string, req *http.Request) (reply map[string]interface{}, bucket *Bucket, err error) {
+func (bctl *BucketCtl) BucketUpload(bucket_name, key string, req *http.Request) (reply *reply.LookupResult, bucket *Bucket, err error) {
 	bucket, err = bctl.FindBucket(bucket_name)
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, err.Error())
@@ -298,7 +299,7 @@ func (bctl *BucketCtl) Stream(bname, key string, w http.ResponseWriter, req *htt
 }
 
 
-func (bctl *BucketCtl) Lookup(bname, key string, req *http.Request) (reply map[string]interface{}, err error) {
+func (bctl *BucketCtl) Lookup(bname, key string, req *http.Request) (reply *reply.LookupResult, err error) {
 	bucket, err := bctl.FindBucket(bname)
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, err.Error())

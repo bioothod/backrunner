@@ -7,6 +7,7 @@ import (
 	"github.com/bioothod/backrunner/auth"
 	"github.com/bioothod/backrunner/errors"
 	"github.com/bioothod/backrunner/etransport"
+	"github.com/bioothod/backrunner/reply"
 	"github.com/bioothod/elliptics-go/elliptics"
 	"github.com/vmihailenco/msgpack"
 	"fmt"
@@ -262,47 +263,45 @@ func (b *Bucket) check_auth(r *http.Request, required_flags uint64) (err error) 
 	return
 }
 
-func (bucket *Bucket) lookup_serialize(write bool, ch <-chan elliptics.Lookuper) (map[string]interface{}, error) {
-	var info []interface{}
-	var egroups, sgroups []uint32
-
-	egroups = make([]uint32, 0)
-	sgroups = make([]uint32, 0)
+func (bucket *Bucket) lookup_serialize(write bool, ch <-chan elliptics.Lookuper) (*reply.LookupResult, error) {
+	r := &reply.LookupResult {
+		Servers:		make([]*reply.LookupServerResult, 0, 2),
+		SuccessGroups:		make([]uint32, 0, 2),
+		ErrorGroups:		make([]uint32, 0, 2),
+	}
 
 	var err error
 	for l := range ch {
-		ret := make(map[string]interface{})
+		ret := &reply.LookupServerResult {
+			Error:		l.Error(),
+		}
 		if l.Error() != nil {
-			egroups = append(egroups, l.Cmd().ID.Group)
-
-			ret["error"] = fmt.Sprintf("%v", l.Error())
+			r.ErrorGroups = append(r.ErrorGroups, l.Cmd().ID.Group)
 			err = l.Error()
 		} else {
-			sgroups = append(sgroups, l.Cmd().ID.Group)
+			r.SuccessGroups = append(r.SuccessGroups, l.Cmd().ID.Group)
 
-			ret["id"] = hex.EncodeToString(l.Cmd().ID.ID)
-			ret["csum"] = hex.EncodeToString(l.Info().Csum)
-			ret["filename"] = l.Path()
-			ret["size"] = l.Info().Size
-			ret["offset-within-data-file"] = l.Info().Offset
-			ret["mtime"] = l.Info().Mtime.String()
-			ret["server"] = l.StorageAddr().String()
+			ret.IDString = hex.EncodeToString(l.Cmd().ID.ID)
+			ret.CsumString = hex.EncodeToString(l.Info().Csum)
+			ret.Filename = l.Path()
+			ret.Size = l.Info().Size
+			ret.Offset = l.Info().Offset
+			ret.MtimeString = l.Info().Mtime.String()
+			ret.ServerString = l.StorageAddr().String()
+
+			ret.Server = l.StorageAddr()
+			ret.Info = l.Info()
 		}
 
 
-		info = append(info, ret)
+		r.Servers = append(r.Servers, ret)
 	}
 
-	reply := make(map[string]interface{})
-	reply["info"] = info
-	reply["success-groups"] = sgroups
-	reply["error-groups"] = egroups
-
-	if len(sgroups) != 0 {
+	if len(r.SuccessGroups) != 0 {
 		err = nil
 	}
 
-	return reply, err
+	return r, err
 }
 
 func ReadBucket(ell *etransport.Elliptics, name string) (bucket *Bucket, err error) {
