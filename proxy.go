@@ -81,12 +81,12 @@ func (p *bproxy) send_upload_reply(w http.ResponseWriter, req *http.Request,
 
 	reply_json, err := json.Marshal(reply)
 	if err != nil {
-		log.Printf("url: %s: upload: json marshal failed: %q\n", req.URL, err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
+			fmt.Sprintf("upload: json marshal failed: %q", err))
 
 		return Reply {
 			err: err,
-			status: http.StatusBadRequest,
+			status: http.StatusServiceUnavailable,
 		}
 	}
 
@@ -101,7 +101,6 @@ func nobucket_upload_handler(w http.ResponseWriter, req *http.Request, strings .
 
 	resp, bucket, err := proxy.bctl.Upload(key, req)
 	if err != nil {
-		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
 		return Reply {
 			err: err,
 			status: errors.ErrorStatus(err),
@@ -117,7 +116,6 @@ func bucket_upload_handler(w http.ResponseWriter, req *http.Request, strings ...
 
 	resp, b, err := proxy.bctl.BucketUpload(bucket, key, req)
 	if err != nil {
-		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
 		return Reply {
 			err: err,
 			status: errors.ErrorStatus(err),
@@ -133,7 +131,6 @@ func get_handler(w http.ResponseWriter, req *http.Request, strings ...string) Re
 
 	err := proxy.bctl.Stream(bucket, key, w, req)
 	if err != nil {
-		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
 		return Reply {
 			err: err,
 			status: errors.ErrorStatus(err),
@@ -149,7 +146,6 @@ func lookup_handler(w http.ResponseWriter, req *http.Request, strings ...string)
 
 	reply, err := proxy.bctl.Lookup(bucket, key, req)
 	if err != nil {
-		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
 		return Reply {
 			err: err,
 			status: errors.ErrorStatus(err),
@@ -158,8 +154,8 @@ func lookup_handler(w http.ResponseWriter, req *http.Request, strings ...string)
 
 	reply_json, err := json.Marshal(reply)
 	if err != nil {
-		log.Printf("url: %s: lookup: json marshal failed: %q\n", req.URL, err)
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
+			fmt.Sprintf("lookup: json marshal failed: %q", err))
 		return Reply {
 			err: err,
 			status: http.StatusServiceUnavailable,
@@ -178,7 +174,6 @@ func redirect_handler(w http.ResponseWriter, req *http.Request, strings ...strin
 				fmt.Sprintf("redirect is not allowed because of invalid redirect port %d",
 					proxy.conf.Proxy.RedirectPort))
 
-		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
 		return Reply {
 			err: err,
 			status: errors.ErrorStatus(err),
@@ -190,7 +185,6 @@ func redirect_handler(w http.ResponseWriter, req *http.Request, strings ...strin
 
 	reply, err := proxy.bctl.Lookup(bucket, key, req)
 	if err != nil {
-		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
 		return Reply {
 			err: err,
 			status: errors.ErrorStatus(err),
@@ -211,7 +205,6 @@ func redirect_handler(w http.ResponseWriter, req *http.Request, strings ...strin
 		err := errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
 				fmt.Sprintf("could not parse generated redirect url '%s'", url_str))
 
-		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
 		return Reply {
 			err: err,
 			status: errors.ErrorStatus(err),
@@ -225,7 +218,6 @@ func redirect_handler(w http.ResponseWriter, req *http.Request, strings ...strin
 		err := errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
 			fmt.Sprintf("could not generate signature for redirect url '%s': %v", url_str, err))
 
-		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
 		return Reply {
 			err: err,
 			status: errors.ErrorStatus(err),
@@ -246,7 +238,6 @@ func delete_handler(w http.ResponseWriter, req *http.Request, strings ...string)
 
 	err := proxy.bctl.Delete(bucket, key, req)
 	if err != nil {
-		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
 		return Reply {
 			err: err,
 			status: errors.ErrorStatus(err),
@@ -266,7 +257,6 @@ func bulk_delete_handler(w http.ResponseWriter, req *http.Request, strings ...st
         if err = json.NewDecoder(req.Body).Decode(&v); err != nil {
 		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
 			fmt.Sprintf("bulk_delete: could not parse input json: %v", err))
-		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
 		return Reply {
 			err: err,
 			status: errors.ErrorStatus(err),
@@ -277,7 +267,6 @@ func bulk_delete_handler(w http.ResponseWriter, req *http.Request, strings ...st
 	if !ok {
 		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
 			fmt.Sprintf("bulk_delete: there is no 'keys' array"))
-		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
 		return Reply {
 			err: err,
 			status: errors.ErrorStatus(err),
@@ -293,7 +282,6 @@ func bulk_delete_handler(w http.ResponseWriter, req *http.Request, strings ...st
 	if len(keys) == 0 {
 		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
 			fmt.Sprintf("bulk_delete: 'keys' array is empty"))
-		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
 		return Reply {
 			err: err,
 			status: errors.ErrorStatus(err),
@@ -303,7 +291,6 @@ func bulk_delete_handler(w http.ResponseWriter, req *http.Request, strings ...st
 	reply, err := proxy.bctl.BulkDelete(bucket, keys, req)
 	log.Printf("reply: %v, err: %v\n", reply, err)
 	if err != nil {
-		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
 		return Reply {
 			err: err,
 			status: errors.ErrorStatus(err),
@@ -313,7 +300,6 @@ func bulk_delete_handler(w http.ResponseWriter, req *http.Request, strings ...st
 	reply_json, err := json.Marshal(reply)
 	if err != nil {
 		log.Printf("url: %s: bulk_delete: json marshal failed: %q\n", req.URL, err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
 		return Reply {
 			err: err,
 			status: http.StatusBadRequest,
@@ -329,7 +315,6 @@ func bulk_delete_handler(w http.ResponseWriter, req *http.Request, strings ...st
 func stat_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
 	reply, err := proxy.bctl.Stat(req)
 	if err != nil {
-		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
 		return Reply {
 			err: err,
 			status: errors.ErrorStatus(err),
@@ -338,8 +323,8 @@ func stat_handler(w http.ResponseWriter, req *http.Request, strings ...string) R
 
 	reply_json, err := json.Marshal(reply)
 	if err != nil {
-		log.Printf("url: %s: stat: json marshal failed: %q\n", req.URL, err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
+			fmt.Sprintf("stat: json marshal failed: %q", err))
 		return Reply {
 			err: err,
 			status: http.StatusBadRequest,
@@ -415,7 +400,6 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 		status: http.StatusBadRequest,
 		err: errors.NewKeyError(req.URL.String(), http.StatusBadRequest, "there is no registered handler for this path"),
 	}
-	need_flush := true
 
 	path, err := url.QueryUnescape(req.URL.Path)
 	if err != nil {
@@ -438,7 +422,6 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 
 					if len(tmp) >= v.params {
 						reply = v.function(w, req, tmp...)
-						need_flush = false
 						break
 					}
 				}
@@ -454,7 +437,7 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 	log.Printf("access_log: method: '%s', path: '%s', encoded-uri: '%s', status: %d, duration: %.3f ms, err: '%v'\n",
 		req.Method, path, req.URL.RequestURI(), reply.status, float64(time.Since(start).Nanoseconds()) / 1000000.0, msg)
 
-	if need_flush {
+	if reply.err != nil {
 		http.Error(w, reply.err.Error(), reply.status)
 	}
 }
