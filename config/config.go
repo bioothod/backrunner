@@ -124,6 +124,9 @@ type ProxyClientConfig struct {
 
 	// number of seconds redirect signature is valid since @Signtime, streaming module will not return data if timeout has passed
 	RedirectSignatureTimeout int		`json:"redirect-signature-timeout"`
+
+	// cut this substring from the beginning of the filename sent to the streaming module
+	RedirectRoot string			`json:"redirect-root"`
 }
 
 type ProxyConfig struct {

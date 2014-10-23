@@ -168,7 +168,7 @@ func lookup_handler(w http.ResponseWriter, req *http.Request, strings ...string)
 	return GoodReply()
 }
 
-func redirect_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
+func redirect_handler(w http.ResponseWriter, req *http.Request, string_keys ...string) Reply {
 	if proxy.conf.Proxy.RedirectPort == 0 || proxy.conf.Proxy.RedirectPort >= 65536 {
 		err := errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
 				fmt.Sprintf("redirect is not allowed because of invalid redirect port %d",
@@ -180,8 +180,8 @@ func redirect_handler(w http.ResponseWriter, req *http.Request, strings ...strin
 		}
 	}
 
-	bucket := strings[0]
-	key := strings[1]
+	bucket := string_keys[0]
+	key := string_keys[1]
 
 	reply, err := proxy.bctl.Lookup(bucket, key, req)
 	if err != nil {
@@ -207,15 +207,23 @@ func redirect_handler(w http.ResponseWriter, req *http.Request, strings ...strin
 		}
 	}
 
+	filename := srv.Filename
+
+	if len(proxy.conf.Proxy.RedirectRoot) != 0{
+		if strings.HasPrefix(filename, proxy.conf.Proxy.RedirectRoot) {
+			filename = filename[len(proxy.conf.Proxy.RedirectRoot):]
+		}
+	}
+
 	slash := "/"
-	if srv.Filename[0] == '/' {
+	if filename[0] == '/' {
 		slash = ""
 	}
 
 	timestamp := time.Now().Unix()
 	url_str := fmt.Sprintf("%s://%s:%d%s%s:%d:%d",
 		scheme, srv.Server.HostString(), proxy.conf.Proxy.RedirectPort,
-		slash, srv.Filename, srv.Offset, srv.Size)
+		slash, filename, srv.Offset, srv.Size)
 
 	u, err := url.Parse(url_str)
 	if err != nil {
@@ -235,7 +243,7 @@ func redirect_handler(w http.ResponseWriter, req *http.Request, strings ...strin
 	w.Header().Set("X-Ell-SignatureTimeout", fmt.Sprintf("%d", proxy.conf.Proxy.RedirectSignatureTimeout))
 	w.Header().Set("X-Ell-Offset", fmt.Sprintf("%d", srv.Offset))
 	w.Header().Set("X-Ell-Size", fmt.Sprintf("%d", srv.Size))
-	w.Header().Set("X-Ell-File", srv.Filename)
+	w.Header().Set("X-Ell-File", filename)
 
 	signature, err := auth.GenerateSignature(proxy.conf.Proxy.RedirectToken, "GET", req.URL, w.Header())
 	if err != nil {

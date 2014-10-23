@@ -16,6 +16,7 @@
 		"bucket-stat-update-interval": 5,
 		"redirect-port": 80,
 		"redirect-token": "secure token to sign redirect request",
-		"redirect-signature-timeout": 60
+		"redirect-signature-timeout": 60,
+		"redirect-root": "/opt/disk/elliptics"
 	}
 }
