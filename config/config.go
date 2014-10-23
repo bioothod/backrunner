@@ -114,6 +114,13 @@ type ProxyClientConfig struct {
 
 	// bucket statistics update time in seconds
 	BucketStatUpdateInterval int		`json:"bucket-stat-update-interval"`
+
+	// all redirect requests will be redirected to following port, it port is outside of allowed [0, 65536) range,
+	// redirect requests will return http.StatusServiceUnavailable
+	RedirectPort int			`json:"redirect-port"`
+
+	// all redirect replies will contain @auth.AuthHeaderStr 'Authorization' header generated with given token
+	RedirectToken string
 }
 
 type ProxyConfig struct {

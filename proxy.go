@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/bioothod/backrunner/auth"
 	"github.com/bioothod/backrunner/config"
 	"github.com/bioothod/backrunner/errors"
 	"github.com/bioothod/backrunner/bucket"
@@ -66,10 +67,10 @@ func (p *bproxy) local_url(key, bucket, operation string) string {
 }
 
 func (p *bproxy) send_upload_reply(w http.ResponseWriter, req *http.Request,
-		bucket *bucket.Bucket, key string, resp map[string]interface{}) Reply {
+		bucket *bucket.Bucket, key string, resp *reply.LookupResult) Reply {
 	reply := reply.Upload {
 		Bucket: bucket.Name,
-		Reply:  &resp,
+		Reply:  resp,
 		Primary: reply.Entry {
 			Key:	key,
 			Get:    "GET " + proxy.local_url(key, bucket.Name, "get"),
@@ -158,10 +159,10 @@ func lookup_handler(w http.ResponseWriter, req *http.Request, strings ...string)
 	reply_json, err := json.Marshal(reply)
 	if err != nil {
 		log.Printf("url: %s: lookup: json marshal failed: %q\n", req.URL, err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return Reply {
 			err: err,
-			status: http.StatusBadRequest,
+			status: http.StatusServiceUnavailable,
 		}
 	}
 
@@ -170,6 +171,74 @@ func lookup_handler(w http.ResponseWriter, req *http.Request, strings ...string)
 
 	return GoodReply()
 }
+
+func redirect_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
+	if proxy.conf.Proxy.RedirectPort == 0 || proxy.conf.Proxy.RedirectPort >= 65536 {
+		err := errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
+				fmt.Sprintf("redirect is not allowed because of invalid redirect port %d",
+					proxy.conf.Proxy.RedirectPort))
+
+		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
+		return Reply {
+			err: err,
+			status: errors.ErrorStatus(err),
+		}
+	}
+
+	bucket := strings[0]
+	key := strings[1]
+
+	reply, err := proxy.bctl.Lookup(bucket, key, req)
+	if err != nil {
+		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
+		return Reply {
+			err: err,
+			status: errors.ErrorStatus(err),
+		}
+	}
+
+	srv := reply.Servers[0]
+	scheme := "http"
+	if req.URL.Scheme != "" {
+		scheme = req.URL.Scheme
+	}
+	url_str := fmt.Sprintf("%s://%s:%d?file=%s&offset=%d&size=%d&time=%d",
+		scheme, srv.Server.HostString(), proxy.conf.Proxy.RedirectPort,
+		srv.Filename, srv.Offset, srv.Size, srv.Info.Mtime.Unix())
+
+	u, err := url.Parse(url_str)
+	if err != nil {
+		err := errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
+				fmt.Sprintf("could not parse generated redirect url '%s'", url_str))
+
+		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
+		return Reply {
+			err: err,
+			status: errors.ErrorStatus(err),
+		}
+	}
+
+	req.URL = u
+
+	signature, err := auth.GenerateSignature(proxy.conf.Proxy.RedirectToken, "GET", req.URL, req.Header)
+	if err != nil {
+		err := errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
+			fmt.Sprintf("could not generate signature for redirect url '%s': %v", url_str, err))
+
+		http.Error(w, errors.ErrorData(err), errors.ErrorStatus(err))
+		return Reply {
+			err: err,
+			status: errors.ErrorStatus(err),
+		}
+	}
+
+	w.Header().Set(auth.AuthHeaderStr, signature)
+
+	http.Redirect(w, req, url_str, http.StatusFound)
+
+	return GoodReply()
+}
+
 
 func delete_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
 	bucket := strings[0]
@@ -310,6 +379,11 @@ var proxy_handlers = map[string]handler {
 		methods: []string{"GET"},
 		function: lookup_handler,
 	},
+	"/redirect/" : {
+		params: 2,
+		methods: []string{"GET"},
+		function: redirect_handler,
+	},
 	"/delete/" : {
 		params: 2,
 		methods: []string{"POST", "PUT"},
@@ -381,7 +455,7 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 		req.Method, path, req.URL.RequestURI(), reply.status, float64(time.Since(start).Nanoseconds()) / 1000000.0, msg)
 
 	if need_flush {
-		http.Error(w, reply.err.Error(), http.StatusBadRequest)
+		http.Error(w, reply.err.Error(), reply.status)
 	}
 }
 
@@ -431,6 +505,11 @@ func main() {
 
 	if len(proxy.conf.Proxy.Address) == 0 {
 		log.Fatalf("'address' must be specified in proxy config '%s'\n", *config_file)
+	}
+
+	if proxy.conf.Proxy.RedirectPort == 0 || proxy.conf.Proxy.RedirectPort >= 65536 {
+		log.Printf("redirect is not allowed because of invalid redirect port %d",
+			proxy.conf.Proxy.RedirectPort)
 	}
 
 	proxy.ell, err = etransport.NewEllipticsTransport(proxy.conf)

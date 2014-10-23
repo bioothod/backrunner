@@ -13,6 +13,8 @@
 		"idle-timeout": 60,
 		"min-avail-space-ratio": 0.2,
 		"bucket-update-interval": 30,
-		"bucket-stat-update-interval": 5
+		"bucket-stat-update-interval": 5,
+		"redirect-port": 80,
+		"redirect-token": "secure token to sign redirect request"
 	}
 }
