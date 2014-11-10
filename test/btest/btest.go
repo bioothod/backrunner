@@ -49,6 +49,9 @@ type BackrunnerTest struct {
 
 	conf *config.ProxyConfig
 
+	// bucket which contains group, which does not exist in the elliptics cluster
+	failed_bucket string
+
 	// buffer used in ACL check requests, it is never freed
 	acl_buffer []byte
 
@@ -85,41 +88,41 @@ type BackrunnerTest struct {
 	free_space_ratio_hard float64
 }
 
-func (t *BackrunnerTest) check_upload_reply(bucket, key string, resp *http.Response) error {
+func (t *BackrunnerTest) check_upload_reply(bucket, key string, resp *http.Response) (*reply.Upload, error) {
 	var err error
 
 	resp_data, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status: '%s', url: '%s', headers: req: %v, resp: %v, data-received: %s",
+		return nil, fmt.Errorf("status: '%s', url: '%s', headers: req: %v, resp: %v, data-received: %s",
 			resp.Status, resp.Request.URL.String(), resp.Request.Header, resp.Header, string(resp_data))
 	}
 
 	var rep reply.Upload
 	err = json.Unmarshal(resp_data, &rep)
 	if err != nil {
-		return fmt.Errorf("invalid reply '%s': %s", string(resp_data), err.Error())
+		return nil, fmt.Errorf("invalid reply '%s': %s", string(resp_data), err.Error())
 	}
 
 	if rep.Primary.Key != key {
-		return fmt.Errorf("invalid reply '%s': keys do not match: sent: '%s', recv: '%s'", string(resp_data), key, rep.Primary.Key)
+		return nil, fmt.Errorf("invalid reply '%s': keys do not match: sent: '%s', recv: '%s'", string(resp_data), key, rep.Primary.Key)
 	}
 
 	if rep.Bucket == "" {
-		return fmt.Errorf("invalid reply '%s': returned invalid bucket name: '%s'", string(resp_data), rep.Bucket)
+		return nil, fmt.Errorf("invalid reply '%s': returned invalid bucket name: '%s'", string(resp_data), rep.Bucket)
 	}
 
 	if bucket != "" {
 		if rep.Bucket != bucket {
-			return fmt.Errorf("invalid reply '%s': buckets do not match: sent: %s, recv: %s",
+			return nil, fmt.Errorf("invalid reply '%s': buckets do not match: sent: %s, recv: %s",
 				string(resp_data), bucket, rep.Bucket)
 		}
 	}
 
-	return nil
+	return &rep, nil
 }
 
 func (t *BackrunnerTest) NewRequest(method, handler, user, token, bucket, key string, offset, size uint64, body io.Reader) *http.Request {
@@ -387,7 +390,7 @@ func test_big_bucket_upload(t *BackrunnerTest) error {
 	}
 	defer resp.Body.Close()
 
-	err = t.check_upload_reply(bucket, key, resp)
+	_, err = t.check_upload_reply(bucket, key, resp)
 	if err != nil {
 		return fmt.Errorf("big-bucket-upload: %v", err)
 	}
@@ -428,7 +431,7 @@ func (t *BackrunnerTest) upload_get_helper(bucket, key_orig, user, token string)
 	}
 	defer resp.Body.Close()
 
-	err = t.check_upload_reply(bucket, key_orig, resp)
+	_, err = t.check_upload_reply(bucket, key_orig, resp)
 	if err != nil {
 		return fmt.Errorf("upload-get-helper: %v", err)
 	}
@@ -464,7 +467,7 @@ func test_bucket_delete(t *BackrunnerTest) error {
 	}
 	defer resp.Body.Close()
 
-	err = t.check_upload_reply(bucket, key, resp)
+	_, err = t.check_upload_reply(bucket, key, resp)
 	if err != nil {
 		return err
 	}
@@ -521,7 +524,7 @@ func test_bucket_bulk_delete(t *BackrunnerTest) error {
 		}
 		defer resp.Body.Close()
 
-		err = t.check_upload_reply(bucket, key, resp)
+		_, err = t.check_upload_reply(bucket, key, resp)
 		if err != nil {
 			return err
 		}
@@ -589,7 +592,8 @@ func test_nobucket_upload(t *BackrunnerTest) error {
 	}
 	defer resp.Body.Close()
 
-	return t.check_upload_reply("", key, resp)
+	_, err = t.check_upload_reply("", key, resp)
+	return err
 }
 
 func test_uniform_free_space(t *BackrunnerTest) error {
@@ -865,19 +869,17 @@ func test_stats_update(t *BackrunnerTest) error {
 
 func test_bucket_file_update(t *BackrunnerTest) error {
 	bname := strconv.FormatInt(rand.Int63(), 16)
-	user := strconv.FormatInt(rand.Int63(), 16)
-	token := strconv.FormatInt(rand.Int63(), 16)
 
 	meta := bucket.BucketMsgpack {
 		Version: 1,
 		Name: bname,
-		Groups: t.groups,
+		Groups: []uint32{t.groups[0], 12345},
 		Acl: make(map[string]bucket.BucketACL),
 	}
 	acl := bucket.BucketACL {
 		Version: 1,
-		User: user,
-		Token: token,
+		User: t.all_allowed_user,
+		Token: t.all_allowed_token,
 		Flags: bucket.BucketAuthWrite,
 	}
 	meta.Acl[acl.User] = acl
@@ -910,6 +912,42 @@ func test_bucket_file_update(t *BackrunnerTest) error {
 		return fmt.Errorf("There is no bucket '%s' in new stats", bname)
 	}
 
+	t.failed_bucket = bname
+	return nil
+}
+
+// if there is no group it must be indicated in error groups
+func test_write_failed(t *BackrunnerTest) error {
+	if len(t.failed_bucket) == 0 {
+		return fmt.Errorf("'failed bucket' was not setup in the test structure")
+	}
+	key := strconv.FormatInt(rand.Int63(), 16)
+
+	total_size := 1024 * (rand.Int31n(100) + 1)
+	buf := make([]byte, total_size)
+	_, err := cryptorand.Read(buf)
+	if err != nil {
+		return fmt.Errorf("could not read random data: %v", err)
+	}
+
+	body := bytes.NewReader(buf)
+	req := t.NewRequest("POST", "upload", t.all_allowed_user, t.all_allowed_token, t.failed_bucket, key, 0, 0, body)
+
+	resp, err := t.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("could not send upload request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	rep, err := t.check_upload_reply(t.failed_bucket, key, resp)
+	if err != nil {
+		return err
+	}
+
+	if len(rep.Reply.ErrorGroups) != 1 {
+		return fmt.Errorf("failed write it not present in reply: %v", rep)
+	}
+
 	return nil
 }
 
@@ -924,6 +962,7 @@ var tests = [](func(t *BackrunnerTest) error) {
 	test_bucket_delete,
 	test_bucket_bulk_delete,
 	test_bucket_update,
+	test_write_failed,
 	test_uniform_free_space,
 }
 
