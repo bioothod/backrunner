@@ -24,7 +24,7 @@ func (bt *BackrunnerTest) StartEllipticsServer() {
 					},
 					Sink: cnf.Sink {
 						Type: "files",
-						Path: fmt.Sprintf("%s/server.log", bt.base),
+						Path: bt.server_log,
 						AutoFlush: true,
 						Rotation: cnf.Rotation {
 							Move: 0,
@@ -106,7 +106,7 @@ func (bt *BackrunnerTest) StartEllipticsServer() {
 }
 
 func (bt *BackrunnerTest) StartEllipticsClientProxy(proxy_path string) {
-	bt.conf.Elliptics.LogFile = fmt.Sprintf("%s/backrunner.log", bt.base)
+	bt.conf.Elliptics.LogFile = bt.test_log
 	bt.conf.Elliptics.LogPrefix = "backrunner: "
 
 	file := fmt.Sprintf("%s/elliptics_transport.conf", bt.base)
@@ -163,7 +163,7 @@ func (bt *BackrunnerTest) StartEllipticsClientProxy(proxy_path string) {
 
 	bt.ACLInit()
 
-	bt.conf.Elliptics.LogFile = fmt.Sprintf("%s/proxy.log", bt.base)
+	bt.conf.Elliptics.LogFile = bt.proxy_log
 	bt.conf.Elliptics.LogPrefix = "proxy: "
 
 	file = fmt.Sprintf("%s/proxy.conf", bt.base)

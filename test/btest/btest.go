@@ -35,6 +35,9 @@ type CheckRequest struct {
 type BackrunnerTest struct {
 	base string
 
+	// various log files
+	test_log, server_log, proxy_log string
+
 	// file where all IO bucket names are stored, it is used by proxy
 	bucket_file string
 
@@ -960,10 +963,21 @@ func TestResult(err error) string {
 	return fmt.Sprintf(err.Error())
 }
 
+func update_log(file, msg string) {
+	fd, err := os.OpenFile(file, os.O_RDWR|os.O_APPEND, 0644)
+	if err == nil {
+		fmt.Fprintf(fd, "\n%s\n", msg)
+	}
+	fd.Close()
+}
+
 func Start(base, proxy_path string) {
 
 	bt := &BackrunnerTest {
 		base: base,
+		server_log: fmt.Sprintf("%s/server.log", base),
+		test_log: fmt.Sprintf("%s/backrunner.log", base),
+		proxy_log: fmt.Sprintf("%s/proxy.log", base),
 		client: &http.Client{},
 		ell: nil,
 		groups: []uint32{1,2,3},
@@ -1015,9 +1029,17 @@ func Start(base, proxy_path string) {
 	bt.StartEllipticsClientProxy(proxy_path)
 
 	for _, t := range tests {
-		log.Printf("TEST-START: %s\n", FunctionName(t))
+		msg := fmt.Sprintf("TEST-STARTED: %s", FunctionName(t))
+		update_log(bt.proxy_log, msg)
+		update_log(bt.server_log, msg)
+		update_log(bt.test_log, msg)
+
 		err := t(bt)
-		log.Printf("TEST-COMPLETE: %s: %s\n", FunctionName(t), TestResult(err))
+
+		msg = fmt.Sprintf("TEST-COMPLETED: %s: %s", FunctionName(t), TestResult(err))
+		update_log(bt.proxy_log, msg)
+		update_log(bt.server_log, msg)
+		update_log(bt.test_log, msg)
 
 		fmt.Printf("%s: %s\n", FunctionName(t), TestResult(err))
 
