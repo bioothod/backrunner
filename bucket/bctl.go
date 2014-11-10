@@ -21,6 +21,16 @@ import (
 	"time"
 )
 
+const (
+	// time to write 1 byte into error bucket in seconds
+	// this is randomly selected error gain for buckets where upload has failed
+	BucketWriteErrorPain float64	= 1000.0
+
+	PainNoStats float64		= 15000000.0
+	PainNoFreeSpaceSoft float64	= 500000.0
+	PainNoFreeSpaceHard float64	= 250000000.0
+)
+
 func URIOffsetSize(req *http.Request) (offset uint64, size uint64, err error) {
 	offset = 0
 	size = 0
@@ -120,9 +130,6 @@ func (bctl *BucketCtl) BucketStatUpdate() (err error) {
 
 	bctl.StatTime = stat.Time
 
-	succeed_groups := make([]uint32, 0)
-	failed_groups := make([]uint32, 0)
-
 	buckets := 0
 	for _, b := range bctl.AllBuckets() {
 		buckets++
@@ -130,26 +137,106 @@ func (bctl *BucketCtl) BucketStatUpdate() (err error) {
 
 		for _, group := range b.Meta.Groups {
 			sg, ok := stat.Group[group]
-			if !ok {
-				failed_groups = append(failed_groups, group)
-			} else {
+			if ok {
 				b.Group[group] = sg
-				succeed_groups = append(succeed_groups, group)
 			}
 		}
 	}
 
-	log.Printf("bctl: stats have been updated: buckets: %d, succeeded-groups: %v, failed-gropus: %v\n",
-		buckets, succeed_groups, failed_groups)
-
 	return
 }
 
-func (bctl *BucketCtl) GetBucket() (bucket *Bucket) {
+func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket) {
+	s, err := bctl.e.MetadataSession()
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
+			fmt.Sprintf("get-bucket: could not create metadata session: %v", err))
+		return bctl.Bucket[rand.Intn(len(bctl.Bucket))]
+	}
+
 	bctl.RLock()
 	defer bctl.RUnlock()
 
-	return bctl.Bucket[rand.Intn(len(bctl.Bucket))]
+	type bucket_stat struct {
+		Bucket		*Bucket
+		NoFreeSpace	bool
+		SuccessGroups	[]uint32
+		ErrorGroups	[]uint32
+		Pain		float64
+	}
+
+	stat := make([]*bucket_stat, 0)
+
+	bctl.RLock()
+
+	for _, b := range bctl.Bucket {
+		bs := &bucket_stat {
+			Bucket:		b,
+			NoFreeSpace:	false,
+			SuccessGroups:	make([]uint32, 0),
+			ErrorGroups:	make([]uint32, 0),
+			Pain:		0.0,
+		}
+
+		for group_id, sg := range b.Group {
+			st, err := sg.FindStatBackend(s, key, group_id)
+			if err != nil {
+				// there is no statistics for given address+backend, which should host our data
+				// do not allow to write into the bucket which contains given address+backend
+
+				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
+
+				bs.Pain += PainNoStats
+				continue
+			}
+
+			free_space_rate := 1.0 - float64(st.VFS.BackendUsedSize + uint64(req.ContentLength)) / float64(st.VFS.TotalSizeLimit)
+			if free_space_rate <= bctl.conf.Proxy.FreeSpaceRatioHard {
+				bs.NoFreeSpace = true
+				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
+
+				bs.Pain += PainNoFreeSpaceHard
+			} else if free_space_rate <= bctl.conf.Proxy.FreeSpaceRatioSoft {
+				bs.NoFreeSpace = true
+				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
+
+				bs.Pain += PainNoFreeSpaceSoft
+			} else {
+				bs.SuccessGroups = append(bs.SuccessGroups, group_id)
+
+				free_space_pain := 1.0 / (free_space_rate - bctl.conf.Proxy.FreeSpaceRatioSoft)
+				if free_space_pain >= PainNoFreeSpaceSoft {
+					free_space_pain = PainNoFreeSpaceSoft * 0.8
+				}
+
+				bs.Pain += free_space_pain
+			}
+
+			bs.Pain += st.PID.Pain
+
+			log.Printf("find-bucket: bucket: %s, group: %d: free-space-rate: %f, nospace: %v, backend-pain: %f, pain: %f\n",
+				b.Name, group_id, free_space_rate, bs.NoFreeSpace, st.PID.Pain, bs.Pain)
+		}
+
+		stat = append(stat, bs)
+	}
+
+	bctl.RUnlock()
+
+	fastest_bucket := bctl.Bucket[rand.Intn(len(bctl.Bucket))]
+	min_pain := 10000000000000.0
+	for _, bs := range stat {
+		if bs.Pain < min_pain {
+			min_pain = bs.Pain
+			fastest_bucket = bs.Bucket
+		}
+	}
+
+	if min_pain >= PainNoFreeSpaceHard {
+		fastest_bucket = nil
+	}
+
+	return fastest_bucket
 }
 
 func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Request) (reply *reply.LookupResult, err error) {
@@ -192,12 +279,63 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 		return
 	}
 
+	start := time.Now()
+
 	reply, err = bucket.lookup_serialize(true, s.WriteData(key, req.Body, offset, total_size))
+
+	// in the ideal world this should be zero,
+	// in the real one we are limited by performance of the network, disk, CPU and many other things
+	// which introduce delays.
+	//
+	// Let's call this cummulative delay (or time needed to write 1 byte)
+	// an error and build a PID-controller around this 'error' value
+
+	time_ms := time.Since(start).Nanoseconds() / 1000
+	one_byte_write_time := float64(time_ms) / float64(total_size)
+	e := one_byte_write_time
+
+	bctl.Lock()
+
+	for _, group_id := range reply.SuccessGroups {
+		sg, ok := bucket.Group[group_id]
+		if ok {
+			st, back_err := sg.FindStatBackend(s, key, group_id)
+			if back_err == nil {
+				old_pain := st.PID.Pain
+				st.PIDUpdate(e)
+
+				log.Printf("bucket-upload: bucket: %s, key: %s, size: %d, time: %d ms, success group: %d, e: %f, pain: %f -> %f\n",
+					bucket.Name, key, total_size, time_ms, group_id, e, old_pain, st.PID.Pain)
+			}
+		}
+	}
+
+	for _, group_id := range reply.ErrorGroups {
+		sg, ok := bucket.Group[group_id]
+		if ok {
+			st, back_err := sg.FindStatBackend(s, key, group_id)
+			if back_err == nil {
+				old_pain := st.PID.Pain
+				st.PIDUpdate(BucketWriteErrorPain)
+
+				log.Printf("bucket-upload: bucket: %s, key: %s, size: %d, time: %d ms, error group: %d, e: %f, pain: %f -> %f\n",
+					bucket.Name, key, total_size, time_ms, group_id, e, old_pain, st.PID.Pain)
+			}
+		}
+	}
+
+	bctl.Unlock()
+
 	return
 }
 
 func (bctl *BucketCtl) Upload(key string, req *http.Request) (reply *reply.LookupResult, bucket *Bucket, err error) {
-	bucket = bctl.GetBucket()
+	bucket = bctl.GetBucket(key, req)
+	if bucket == nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
+			fmt.Sprintf("there are no buckets with free space available"))
+		return
+	}
 
 	reply, err = bctl.bucket_upload(bucket, key, req)
 	return
@@ -555,7 +693,7 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 		BackBucket:		make([]*Bucket, 0, 10),
 
 		BucketTimer:		time.NewTimer(time.Second * 30),
-		BucketStatTimer:	time.NewTimer(time.Second * 5),
+		BucketStatTimer:	time.NewTimer(time.Second * 2),
 	}
 
 	err = bctl.ReadConfig()
@@ -582,7 +720,7 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 
 				if bctl.conf.Proxy.BucketStatUpdateInterval > 0 {
 					bctl.RLock()
-					bctl.BucketTimer.Reset(time.Second * time.Duration(bctl.conf.Proxy.BucketStatUpdateInterval))
+					bctl.BucketStatTimer.Reset(time.Second * time.Duration(bctl.conf.Proxy.BucketStatUpdateInterval))
 					bctl.RUnlock()
 				}
 

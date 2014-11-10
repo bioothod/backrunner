@@ -4,6 +4,8 @@
 		"log-level": "info",
 		"log-prefix": "backrunner: ",
 		"remote": [
+			"qweqwe:1024:2",
+			"qweqwe:1025:2",
 			"localhost:1026:2"
 		],
 		"metadata-groups": [1,2]
@@ -11,12 +13,13 @@
 	"proxy": {
 		"address": "0.0.0.0:9090",
 		"idle-timeout": 60,
-		"min-avail-space-ratio": 0.2,
+		"free-space-ratio-soft": 0.2,
+		"free-space-ratio-hard": 0.15,
 		"bucket-update-interval": 30,
 		"bucket-stat-update-interval": 5,
-		"redirect-port": 80,
+		"redirect-port": 8080,
 		"redirect-token": "secure token to sign redirect request",
 		"redirect-signature-timeout": 60,
-		"redirect-root": "/opt/disk/elliptics"
+		"redirect-root": "/mnt"
 	}
 }

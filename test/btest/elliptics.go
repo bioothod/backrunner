@@ -32,7 +32,7 @@ func (bt *BackrunnerTest) StartEllipticsServer() {
 					},
 				},
 			},
-			Level: "info",
+			Level: "notice",
 		},
 		Options: cnf.Options {
 			Join: true,
@@ -43,8 +43,8 @@ func (bt *BackrunnerTest) StartEllipticsServer() {
 			},
 			Wait_Timeout: 60,
 			Check_Timeout: 120,
-			NonBlocking_IO_Thread_Num: 2,
-			IO_Thread_Num: 2,
+			NonBlocking_IO_Thread_Num: 4,
+			IO_Thread_Num: 4,
 			Net_Thread_Num: 1,
 			Daemon: false,
 			Auth_Cookie: fmt.Sprintf("%016x", rand.Int63()),
@@ -71,6 +71,7 @@ func (bt *BackrunnerTest) StartEllipticsServer() {
 			Blob_Size: "20M",
 			Records_In_Blob: 1000,
 			Blob_Size_Limit: fmt.Sprintf("%dM", 60 + rand.Intn(5) * 20),
+			PeriodicTimeout: 30,
 		}
 
 		err = os.MkdirAll(backend.History, 0755)

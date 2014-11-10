@@ -79,8 +79,10 @@ type BackrunnerTest struct {
 	//
 	// this value will be specified in proxy config, it sets minimum ratio of free
 	// space for every backend, it is forbidden to write into backend if amount of free
-	// space will be less than this ratio
-	min_avail_space_ratio float64
+	// space will be less than hard limit, it is only allowed to write into bucket
+	// with less than soft free space ratio limit if there are no other buckets to write
+	free_space_ratio_soft float64
+	free_space_ratio_hard float64
 }
 
 func (t *BackrunnerTest) check_upload_reply(bucket, key string, resp *http.Response) error {
@@ -591,17 +593,13 @@ func test_nobucket_upload(t *BackrunnerTest) error {
 }
 
 func test_uniform_free_space(t *BackrunnerTest) error {
-	key := strconv.FormatInt(rand.Int63(), 16)
-
-	// [1, 11+1) megabytes
-	total_size := 1024 * (rand.Int31n(1 * 1024) + 11 * 1024)
-	buf := make([]byte, total_size)
-	_, err := cryptorand.Read(buf)
-	if err != nil {
-		return fmt.Errorf("big-bucket-upload: could not read random data: %v", err)
-	}
-
 	for {
+		key := strconv.FormatInt(rand.Int63(), 16)
+
+		// [1024, 1024 * 1024)
+		total_size := 1024 + rand.Int31n(1 * 1024 * 1024)
+		buf := make([]byte, total_size)
+
 		body := bytes.NewReader(buf)
 		req := t.NewRequest("POST", "nobucket_upload", t.all_allowed_user, t.all_allowed_token, "", key, 0, 0, body)
 
@@ -616,6 +614,8 @@ func test_uniform_free_space(t *BackrunnerTest) error {
 			return err
 		}
 
+		time.Sleep(time.Millisecond * 100)
+
 		if resp.StatusCode != http.StatusOK {
 			log.Printf("uniform-free-space: status: '%s', url: '%s', headers: req: %v, resp: %v, data-received: %s",
 				resp.Status, resp.Request.URL.String(), resp.Request.Header, resp.Header, string(resp_data))
@@ -626,7 +626,7 @@ func test_uniform_free_space(t *BackrunnerTest) error {
 	// there should be no free space in any IO bucket, let's check it
 
 	// sleep for bucket statistics to settle from previous tests, it is periodic
-	time.Sleep(6 * time.Second)
+	time.Sleep(3 * time.Second)
 
 	st, err := t.parse_stat()
 	if err != nil {
@@ -667,8 +667,8 @@ func test_uniform_free_space(t *BackrunnerTest) error {
 			min_rate, max_rate, max_rate / min_rate, max_diff)
 	}
 
-	min_percentage := t.min_avail_space_ratio
-	max_percentage := t.min_avail_space_ratio * 2
+	min_percentage := t.free_space_ratio_hard
+	max_percentage := t.free_space_ratio_soft
 
 	// both min and max rate of available to total allowed space should be within 'safe harbour'
 
@@ -953,7 +953,8 @@ func Start(base, proxy_path string) {
 		all_allowed_user: "all-allowed-user",
 		all_allowed_token: "all-allowed-token",
 		io_buckets: make([]string, 0),
-		min_avail_space_ratio: 0.1,
+		free_space_ratio_hard: 0.1,
+		free_space_ratio_soft: 0.2,
 	}
 
 	rand.Seed(3)
@@ -975,7 +976,7 @@ func Start(base, proxy_path string) {
 	// from the server's config address
 	bt.conf = &config.ProxyConfig {
 		Elliptics: config.EllipticsClientConfig {
-			LogLevel: "debug",
+			LogLevel: "notice",
 			Remote: bt.elliptics_address,
 			MetadataGroups: bt.groups,
 		},
@@ -983,9 +984,10 @@ func Start(base, proxy_path string) {
 		Proxy: config.ProxyClientConfig {
 			Address: fmt.Sprintf("localhost:%d", rand.Int31n(5000) + 60000),
 			IdleTimeout: 60,
-			MinAvailSpaceRatio: bt.min_avail_space_ratio,
+			FreeSpaceRatioSoft: bt.free_space_ratio_soft,
+			FreeSpaceRatioHard: bt.free_space_ratio_hard,
 			BucketUpdateInterval: 20,
-			BucketStatUpdateInterval: 5,
+			BucketStatUpdateInterval: 1,
 		},
 	}
 

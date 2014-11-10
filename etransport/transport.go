@@ -2,13 +2,9 @@ package etransport
 
 import (
 	"C"
-	//"encoding/json"
 	"fmt"
 	"github.com/bioothod/elliptics-go/elliptics"
-	//"github.com/bioothod/backrunner/auth"
 	"github.com/bioothod/backrunner/config"
-	//"github.com/bioothod/backrunner/errors"
-	//"github.com/vmihailenco/msgpack"
 	"io"
 	"log"
 	"math/rand"
@@ -16,8 +12,6 @@ import (
 	"os"
 	"strconv"
 	"sync"
-	"time"
-	//"unsafe"
 )
 
 type Elliptics struct {
@@ -89,12 +83,6 @@ func (e *Elliptics) DataSession(req *http.Request) (s *elliptics.Session, err er
 }
 
 func (e *Elliptics) Stat() (stat *elliptics.DnetStat, err error) {
-	// this is kind of cache - we do not update statistics more frequently than once per second
-	if e.prev_stat != nil && time.Since(e.prev_stat.Time).Seconds() <= 1.0 {
-		stat = e.prev_stat
-		return
-	}
-
 	s, err := elliptics.NewSession(e.Node)
 	if err != nil {
 		return
@@ -103,16 +91,11 @@ func (e *Elliptics) Stat() (stat *elliptics.DnetStat, err error) {
 	stat = s.DnetStat()
 
 	e.Lock()
-	defer e.Unlock()
-
-	// if someone changed @prev_stat in parallel
-	if e.prev_stat != nil && time.Since(e.prev_stat.Time).Seconds() <= 1.0 {
-		stat = e.prev_stat
-		return
-	}
 
 	stat.Diff(e.prev_stat)
 	e.prev_stat = stat
+
+	e.Unlock()
 
 	return
 }

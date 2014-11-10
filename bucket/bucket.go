@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"time"
 )
 
 type err_struct struct {
@@ -183,12 +182,17 @@ func (meta *BucketMsgpack) ExtractMsgpack(out []interface{}) (err error) {
 }
 
 type Bucket struct {
-	Name	string
-	Group	map[uint32]*elliptics.StatGroup
+	Name		string
+	Group		map[uint32]*elliptics.StatGroup
 
-	Meta	BucketMsgpack
+	Meta		BucketMsgpack
+}
 
-	Time    time.Time
+func NewBucket(name string) *Bucket {
+	return &Bucket {
+		Name:		name,
+		Group:		make(map[uint32]*elliptics.StatGroup),
+	}
 }
 
 func (b *Bucket) Stat() (reply map[string]interface{}, err error) {
@@ -313,12 +317,7 @@ func ReadBucket(ell *etransport.Elliptics, name string) (bucket *Bucket, err err
 
 	ms.SetNamespace(BucketNamespace)
 
-	b := &Bucket {
-		Name:		name,
-		Group:		make(map[uint32]*elliptics.StatGroup),
-
-		Time:		time.Now(),
-	}
+	b := NewBucket(name)
 
 	for rd := range ms.ReadData(name, 0, 0) {
 		if rd.Error() != nil {
@@ -380,13 +379,8 @@ func WriteBucket(ell *etransport.Elliptics, meta *BucketMsgpack) (bucket *Bucket
 			return
 		}
 
-		bucket = &Bucket {
-			Meta:		*meta,
-			Name:		meta.Name,
-			Group:		make(map[uint32]*elliptics.StatGroup),
-
-			Time:		time.Now(),
-		}
+		bucket = NewBucket(meta.Name)
+		bucket.Meta = *meta
 
 		return
 	}

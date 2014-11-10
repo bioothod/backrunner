@@ -57,6 +57,7 @@ type Backend struct {
 	Records_In_Blob uint64			`json:"records_in_blob"`
 	Blob_Size_Limit string			`json:"blob_size_limit"`
 	DefragPercentage int			`json:"defrag_percentage"`
+	PeriodicTimeout int			`json:"periodic_timeout"`
 }
 type EllipticsServerConfig struct {
 	Logger Logger				`json:"logger"`
@@ -107,7 +108,12 @@ type ProxyClientConfig struct {
 	IdleTimeout int				`json:"idle-timeout"`
 
 	// minimum available free space ratio of bucket to be writable
-	MinAvailSpaceRatio float64		`json:"min-avail-space-ratio"`
+	// but if there are no other options, proxy will select among buckets,
+	// which have more than hard ratio limit but less than soft ratio limit of free space
+	FreeSpaceRatioSoft float64		`json:"free-space-ratio-soft"`
+
+	// it is **really** forbidden to write into the bucket which has less than hard limit of free space
+	FreeSpaceRatioHard float64		`json:"free-space-ratio-hard"`
 
 	// bucket metadata update time in seconds
 	BucketUpdateInterval int		`json:"bucket-update-interval"`
