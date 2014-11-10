@@ -17,7 +17,7 @@ type LookupServerResult struct {
 	Offset		uint64			`json:"offset-within-data-file"`
 	MtimeString	string			`json:"mtime"`
 	ServerString	string			`json:"server"`
-	Error		error			`json:"error"`
+	Error		*elliptics.DnetError	`json:"error"`
 
 	Server		*elliptics.DnetAddr	`json:"-"`
 	Info		*elliptics.DnetFileInfo	`json:"-"`
