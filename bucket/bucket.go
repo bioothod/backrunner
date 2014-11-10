@@ -277,11 +277,20 @@ func (bucket *Bucket) lookup_serialize(write bool, ch <-chan elliptics.Lookuper)
 	var err error
 	for l := range ch {
 		ret := &reply.LookupServerResult {
-			Error:		l.Error(),
 		}
 		if l.Error() != nil {
 			r.ErrorGroups = append(r.ErrorGroups, l.Cmd().ID.Group)
 			err = l.Error()
+			dnet_error := elliptics.DnetErrorFromError(err)
+			if dnet_error != nil {
+				ret.Error = dnet_error
+			} else {
+				ret.Error = &elliptics.DnetError {
+					Code:	-22,
+					Flags:	l.Cmd().Flags,
+					Message: err.Error(),
+				}
+			}
 		} else {
 			r.SuccessGroups = append(r.SuccessGroups, l.Cmd().ID.Group)
 
