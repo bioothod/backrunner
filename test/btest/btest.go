@@ -609,7 +609,7 @@ func test_uniform_free_space(t *BackrunnerTest) error {
 
 		resp, err := t.client.Do(req)
 		if err != nil {
-			return fmt.Errorf("big-bucket-upload: could not send upload request: %v", err)
+			return fmt.Errorf("could not send upload request: %v", err)
 		}
 		defer resp.Body.Close()
 
@@ -621,7 +621,7 @@ func test_uniform_free_space(t *BackrunnerTest) error {
 		time.Sleep(time.Millisecond * 100)
 
 		if resp.StatusCode != http.StatusOK {
-			log.Printf("uniform-free-space: status: '%s', url: '%s', headers: req: %v, resp: %v, data-received: %s",
+			log.Printf("status: '%s', url: '%s', headers: req: %v, resp: %v, data-received: %s",
 				resp.Status, resp.Request.URL.String(), resp.Request.Header, resp.Header, string(resp_data))
 			break
 		}
@@ -637,52 +637,34 @@ func test_uniform_free_space(t *BackrunnerTest) error {
 		return err
 	}
 
-	var min_rate float64 = 0
-	var max_rate float64 = 0
-
 	for _, bname := range t.io_buckets {
 		bucket, ok := st.Buckets[bname]
 		if !ok {
-			return fmt.Errorf("uniform-free-space: there is no IO bucket '%s' in the statistics, check out logs\n", bname)
+			return fmt.Errorf("there is no IO bucket '%s' in the statistics, check out logs\n", bname)
 		}
 
-		for _, group := range bucket.Groups {
+		for group_id, group := range bucket.Groups {
 			for _, ab := range group {
 				sb := ab.Stat
 				rate := float64(sb.VFS.TotalSizeLimit - sb.VFS.BackendUsedSize) / float64(sb.VFS.TotalSizeLimit)
 
-				if rate < min_rate || min_rate == 0 {
-					min_rate = rate
+				if rate >= t.free_space_ratio_soft {
+					return fmt.Errorf("bucket: %s, group: %s, backend: %d, free-space-rate: %f, soft-limit: %f",
+						bname, group_id, ab.Backend, rate, t.free_space_ratio_soft)
 				}
 
-				if rate > max_rate {
-					max_rate = rate
+				// this is invalid ugly check
+				// it should not be allowed to hit hard limit,
+				// but since proxy updates statistics once per some timeout,
+				// it is possible that multiple files will be written during that timeout,
+				// which will force rate to be less than hard limit when statistics has been
+				// updated again
+				if rate < t.free_space_ratio_hard / 2 {
+					return fmt.Errorf("bucket: %s, group: %s, backend: %d, free-space-rate: %f, hard-limit: %f",
+						bname, group_id, ab.Backend, rate, t.free_space_ratio_hard)
 				}
 			}
 		}
-	}
-
-	// we have minimum and maximum rate of free space among all backends.
-	// they should be 'similar', let's consider 10% as a fair 'similarity' check
-
-	max_diff := 1.1
-	if max_rate / min_rate > max_diff {
-		return fmt.Errorf("uniform-free-space: rate difference is too large: min: %f, max: %f, rate: %f, must be less than %f",
-			min_rate, max_rate, max_rate / min_rate, max_diff)
-	}
-
-	min_percentage := t.free_space_ratio_hard
-	max_percentage := t.free_space_ratio_soft
-
-	// both min and max rate of available to total allowed space should be within 'safe harbour'
-
-	if max_rate > max_percentage || max_rate < min_percentage {
-		return fmt.Errorf("uniform-free-space: max rate %f is outside of the safe harbour of free space rate [%f, %f]",
-			max_rate, min_percentage, max_percentage)
-	}
-	if min_rate > max_percentage || min_rate < min_percentage {
-		return fmt.Errorf("uniform-free-space: min rate %f is outside of the safe harbour of free space rate [%f, %f]",
-			min_rate, min_percentage, max_percentage)
 	}
 
 	return nil
@@ -992,7 +974,7 @@ func Start(base, proxy_path string) {
 		all_allowed_user: "all-allowed-user",
 		all_allowed_token: "all-allowed-token",
 		io_buckets: make([]string, 0),
-		free_space_ratio_hard: 0.1,
+		free_space_ratio_hard: 0.15,
 		free_space_ratio_soft: 0.2,
 	}
 
