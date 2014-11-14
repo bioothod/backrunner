@@ -27,6 +27,7 @@ const (
 	BucketWriteErrorPain float64	= 500000.0
 
 	PainNoStats float64		= 15000000.0
+	PainStatError float64		= 15000000.0
 	PainNoFreeSpaceSoft float64	= 500000.0
 	PainNoFreeSpaceHard float64	= 250000000.0
 )
@@ -187,6 +188,15 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
 
 				bs.Pain += PainNoStats
+				continue
+			}
+
+			if st.Error.Code != 0 {
+				// this is usually a timeout error
+
+				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
+
+				bs.Pain += PainStatError
 				continue
 			}
 
