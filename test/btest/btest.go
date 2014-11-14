@@ -936,8 +936,123 @@ func test_write_failed(t *BackrunnerTest) error {
 	return nil
 }
 
+func (t *BackrunnerTest) gather_write_stats(num int) (cnt_smallest, cnt_biggest int, err error) {
+	buf := make([]byte, 100)
+
+	cryptorand.Read(buf)
+
+	cnt_smallest = 100000000
+	cnt_biggest = 0
+
+	counters := make(map[string]int)
+	for i := 0; i < num; i++ {
+		key := strconv.FormatInt(rand.Int63(), 16)
+
+		body := bytes.NewReader(buf)
+		req := t.NewRequest("POST", "nobucket_upload", t.all_allowed_user, t.all_allowed_token, "", key, 0, 0, body)
+
+		var resp *http.Response
+		resp, err = t.client.Do(req)
+		if err != nil {
+			err = fmt.Errorf("gather-write-stats: could not send upload request: %v", err)
+			return
+		}
+		defer resp.Body.Close()
+
+		var rep *reply.Upload
+		rep, err = t.check_upload_reply(t.failed_bucket, key, resp)
+		if err != nil {
+			err = fmt.Errorf("gather-write-stats: could not send upload request: %v", err)
+			return
+		}
+
+		// only update stats for IO buckets
+		// because of probabilistic nature of bucket selection,
+		// it is possible to get ACL bucket, which has all @t.groups and its
+		// total pain will *always* be equal to the pain of those groups
+		//
+		// IO buckets are test buckets which are bound to 1 group each
+		// thus its pain will always be less than that of ACL bucket,
+		// but it still can be selected
+		//
+		// since we slow down one backend in one group, let's be fair and
+		// compare buckets only with 1 group/backend thus excluding ACL bucket
+		// and anything else
+		for _, bname := range t.io_buckets {
+			if rep.Bucket == bname {
+				counters[rep.Bucket]++
+				break
+			}
+		}
+
+		time.Sleep(300 * time.Millisecond)
+	}
+
+	for bname, cnt := range counters {
+		if cnt < cnt_smallest {
+			cnt_smallest = cnt
+		}
+
+		if cnt > cnt_biggest {
+			cnt_biggest = cnt
+		}
+
+		log.Printf("gather-write-stats: bucket %s, writes: %d\n", bname, cnt)
+	}
+
+	return
+}
+
+func test_backend_slowdown(t *BackrunnerTest) error {
+	num := 100
+	cnt_smallest, cnt_biggest, err := t.gather_write_stats(num)
+	if err != nil {
+		return err
+	}
+
+	// this should be roughly the same number of write hits per bucket,
+	// since no bucket has been slown down
+	if float64(cnt_biggest) / float64(cnt_smallest) > 2 {
+		return fmt.Errorf("invalid distribution (should be rougly the same, i.e. difference < 0.5) in the equal run test: smallest: %d, biggest: %d",
+		cnt_smallest, cnt_biggest)
+	}
+
+	s, err := elliptics.NewSession(t.ell.Node)
+	if err != nil {
+		return fmt.Errorf("could not create elliptics session: %v", err)
+	}
+
+	addr, err := elliptics.NewDnetAddrStr(t.elliptics_address[0])
+	if err != nil {
+		return fmt.Errorf("could not create address from '%s': %v", t.elliptics_address[0], err)
+	}
+
+	var backend_id int32 = 1
+	var delay uint32 = 100
+	for _ = range s.BackendSetDelay(&addr, backend_id, delay) {
+	}
+
+	time.Sleep(2 * time.Second)
+
+	cnt_smallest, cnt_biggest, err = t.gather_write_stats(num)
+	if err != nil {
+		return err
+	}
+
+	if cnt_biggest / cnt_smallest < 5 {
+		return fmt.Errorf("invalid distribution (diff must be more than several times, 5 in the code) in the slow run test: smallest: %d, biggest: %d",
+		cnt_smallest, cnt_biggest)
+	}
+
+	delay = 0
+	s.BackendSetDelay(&addr, backend_id, delay)
+
+	return nil
+}
+
 var tests = [](func(t *BackrunnerTest) error) {
 	TestBackendStatusUpdate,
+	test_backend_slowdown,
 	test_nobucket_upload,
 	test_small_bucket_upload,
 	test_big_bucket_upload,
