@@ -24,12 +24,13 @@ import (
 const (
 	// time to write 1 byte into error bucket in seconds
 	// this is randomly selected error gain for buckets where upload has failed
-	BucketWriteErrorPain float64	= 500000.0
+	BucketWriteErrorPain float64	= 5000000000.0
 
-	PainNoStats float64		= 15000000.0
-	PainStatError float64		= 15000000.0
-	PainNoFreeSpaceSoft float64	= 500000.0
-	PainNoFreeSpaceHard float64	= 250000000.0
+	PainNoStats float64		= 15000000000.0
+	PainStatError float64		= 15000000000.0
+	PainNoGroup float64		= 15000000000.0
+	PainNoFreeSpaceSoft float64	= 5000000000.0
+	PainNoFreeSpaceHard float64	= 50000000000.0
 )
 
 func URIOffsetSize(req *http.Request) (offset uint64, size uint64, err error) {
@@ -226,6 +227,17 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 				b.Name, group_id, free_space_rate, st.PID.Pain, bs.Pain)
 		}
 
+		total_groups := len(bs.SuccessGroups) + len(bs.ErrorGroups)
+		diff := 0
+		if len(b.Meta.Groups) > total_groups {
+			diff += len(b.Meta.Groups) - total_groups
+		}
+
+		bs.Pain += float64(diff) * PainNoGroup
+
+		log.Printf("find-bucket: bucket: %s, groups: %v, success-groups: %v, error-groups: %v, pain: %f\n",
+			b.Name, b.Meta.Groups, bs.SuccessGroups, bs.ErrorGroups, bs.Pain)
+
 		// do not even consider buckets without free space even in one group
 		if bs.Pain >= PainNoFreeSpaceHard {
 			continue
@@ -233,6 +245,9 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 
 		if bs.Pain != 0 {
 			bs.Range = 1.0 / bs.Pain
+			if bs.Range == 0 {
+				bs.Range = 1
+			}
 		} else {
 			bs.Range = 1.0
 		}
@@ -283,6 +298,8 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 	for _, bs := range stat {
 		r -= int64(bs.Range)
 		if r <= 0 {
+			log.Printf("find-bucket: selected bucket: %s, groups: %v, pain: %f\n",
+				bs.Bucket.Name, bs.Bucket.Meta.Groups, bs.Pain)
 			return bs.Bucket
 		}
 	}
@@ -334,16 +351,15 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 
 	reply, err = bucket.lookup_serialize(true, s.WriteData(key, req.Body, offset, total_size))
 
-	// in the ideal world this should be zero,
-	// in the real one we are limited by performance of the network, disk, CPU and many other things
-	// which introduce delays.
-	//
-	// Let's call this cummulative delay (or time needed to write 1 byte)
-	// an error and build a PID-controller around this 'error' value
 
-	time_ms := time.Since(start).Nanoseconds() / 1000
-	one_byte_write_time := float64(time_ms) / float64(total_size)
-	e := one_byte_write_time
+	// PID controller should aim at some destination performance point
+	// it can be velocity pf the vehicle or deisred write rate
+	//
+	// Let's consider our desired control point as number of useconds  needed to write 1 byte into the storage
+	// In the ideal world it will be 0.01 or 100 MB/s write speed
+
+	time_us := time.Since(start).Nanoseconds() / 1000
+	e := float64(time_us) / float64(total_size) - 0.01
 
 	bctl.Lock()
 
@@ -355,8 +371,8 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 				old_pain := st.PID.Pain
 				st.PIDUpdate(e)
 
-				log.Printf("bucket-upload: bucket: %s, key: %s, size: %d, time: %d ms, success group: %d, e: %f, pain: %f -> %f\n",
-					bucket.Name, key, total_size, time_ms, group_id, e, old_pain, st.PID.Pain)
+				log.Printf("bucket-upload: bucket: %s, key: %s, size: %d, time: %d us, success group: %d, e: %f, pain: %f -> %f\n",
+					bucket.Name, key, total_size, time_us, group_id, e, old_pain, st.PID.Pain)
 			}
 		}
 	}
@@ -374,8 +390,8 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 				old_pain := st.PID.Pain
 				st.PIDUpdate(BucketWriteErrorPain)
 
-				log.Printf("bucket-upload: bucket: %s, key: %s, size: %d, time: %d ms, error group: %d, e: %f, pain: %f -> %f\n",
-					bucket.Name, key, total_size, time_ms, group_id, e, old_pain, st.PID.Pain)
+				log.Printf("bucket-upload: bucket: %s, key: %s, size: %d, time: %d us, error group: %d, e: %f, pain: %f -> %f\n",
+					bucket.Name, key, total_size, time_us, group_id, e, old_pain, st.PID.Pain)
 			}
 		}
 	}
