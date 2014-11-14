@@ -351,7 +351,12 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 		}
 	}
 
-	for _, group_id := range reply.ErrorGroups {
+	error_groups := reply.ErrorGroups
+	if len(reply.SuccessGroups) == 0 {
+		error_groups = bucket.Meta.Groups
+	}
+
+	for _, group_id := range error_groups {
 		sg, ok := bucket.Group[group_id]
 		if ok {
 			st, back_err := sg.FindStatBackend(s, key, group_id)
