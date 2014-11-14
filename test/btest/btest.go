@@ -960,7 +960,7 @@ func (t *BackrunnerTest) gather_write_stats(num int) (cnt_smallest, cnt_biggest 
 		defer resp.Body.Close()
 
 		var rep *reply.Upload
-		rep, err = t.check_upload_reply(t.failed_bucket, key, resp)
+		rep, err = t.check_upload_reply("", key, resp)
 		if err != nil {
 			err = fmt.Errorf("gather-write-stats: could not send upload request: %v", err)
 			return
@@ -1052,12 +1052,12 @@ func test_backend_slowdown(t *BackrunnerTest) error {
 
 var tests = [](func(t *BackrunnerTest) error) {
 	TestBackendStatusUpdate,
+	test_bucket_file_update,
 	test_backend_slowdown,
 	test_nobucket_upload,
 	test_small_bucket_upload,
 	test_big_bucket_upload,
 	test_acl,
-	test_bucket_file_update,
 	test_stats_update,
 	test_bucket_delete,
 	test_bucket_bulk_delete,
