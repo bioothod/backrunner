@@ -232,6 +232,12 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 
 	bctl.RUnlock()
 
+	// there are no buckets suitable for this request
+	// either there is no space in either bucket, or there are no buckets at all
+	if len(stat) == 0 {
+		return nil
+	}
+
 	for {
 		need_multiple := false
 		multiple := 10.0
