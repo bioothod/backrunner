@@ -159,10 +159,10 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 
 	type bucket_stat struct {
 		Bucket		*Bucket
-		NoFreeSpace	bool
 		SuccessGroups	[]uint32
 		ErrorGroups	[]uint32
 		Pain		float64
+		Range		float64
 	}
 
 	stat := make([]*bucket_stat, 0)
@@ -172,10 +172,10 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 	for _, b := range bctl.Bucket {
 		bs := &bucket_stat {
 			Bucket:		b,
-			NoFreeSpace:	false,
 			SuccessGroups:	make([]uint32, 0),
 			ErrorGroups:	make([]uint32, 0),
 			Pain:		0.0,
+			Range:		0.0,
 		}
 
 		for group_id, sg := range b.Group {
@@ -192,12 +192,10 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 
 			free_space_rate := 1.0 - float64(st.VFS.BackendUsedSize + uint64(req.ContentLength)) / float64(st.VFS.TotalSizeLimit)
 			if free_space_rate <= bctl.conf.Proxy.FreeSpaceRatioHard {
-				bs.NoFreeSpace = true
 				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
 
 				bs.Pain += PainNoFreeSpaceHard
 			} else if free_space_rate <= bctl.conf.Proxy.FreeSpaceRatioSoft {
-				bs.NoFreeSpace = true
 				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
 
 				bs.Pain += PainNoFreeSpaceSoft
@@ -214,8 +212,19 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 
 			bs.Pain += st.PID.Pain
 
-			log.Printf("find-bucket: bucket: %s, group: %d: free-space-rate: %f, nospace: %v, backend-pain: %f, pain: %f\n",
-				b.Name, group_id, free_space_rate, bs.NoFreeSpace, st.PID.Pain, bs.Pain)
+			log.Printf("find-bucket: bucket: %s, group: %d: free-space-rate: %f, backend-pain: %f, pain: %f\n",
+				b.Name, group_id, free_space_rate, st.PID.Pain, bs.Pain)
+		}
+
+		// do not even consider buckets without free space even in one group
+		if bs.Pain >= PainNoFreeSpaceHard {
+			continue
+		}
+
+		if bs.Pain != 0 {
+			bs.Range = 1.0 / bs.Pain
+		} else {
+			bs.Range = 1.0
 		}
 
 		stat = append(stat, bs)
@@ -223,20 +232,46 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 
 	bctl.RUnlock()
 
-	fastest_bucket := bctl.Bucket[rand.Intn(len(bctl.Bucket))]
-	min_pain := 10000000000000.0
-	for _, bs := range stat {
-		if bs.Pain < min_pain {
-			min_pain = bs.Pain
-			fastest_bucket = bs.Bucket
+	for {
+		need_multiple := false
+		multiple := 10.0
+
+		for _, bs := range stat {
+			if bs.Range < multiple {
+				need_multiple = true
+
+				tmp := multiple / bs.Range
+				if tmp > multiple {
+					multiple = tmp
+				}
+
+				break
+			}
+		}
+
+		if !need_multiple {
+			break
+		} else {
+			for _, bs := range stat {
+				bs.Range *= multiple
+			}
 		}
 	}
 
-	if min_pain >= PainNoFreeSpaceHard {
-		fastest_bucket = nil
+	var sum float64 = 0.0
+	for _, bs := range stat {
+		sum += bs.Range
 	}
 
-	return fastest_bucket
+	r := rand.Int63n(int64(sum))
+	for _, bs := range stat {
+		r -= int64(bs.Range)
+		if r <= 0 {
+			return bs.Bucket
+		}
+	}
+
+	return nil
 }
 
 func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Request) (reply *reply.LookupResult, err error) {
