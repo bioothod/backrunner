@@ -277,6 +277,8 @@ func (bucket *Bucket) lookup_serialize(write bool, ch <-chan elliptics.Lookuper)
 	var err error
 	for l := range ch {
 		ret := &reply.LookupServerResult {
+			Group: l.Cmd().ID.Group,
+			Backend: l.Cmd().Backend,
 		}
 		if l.Error() != nil {
 			r.ErrorGroups = append(r.ErrorGroups, l.Cmd().ID.Group)

@@ -62,21 +62,12 @@ func ping_handler(w http.ResponseWriter, r *http.Request, strings ...string) Rep
 	return GoodReply()
 }
 
-func (p *bproxy) local_url(key, bucket, operation string) string {
-	return fmt.Sprintf("http://%s/%s/%s/%s", p.conf.Proxy.Address, operation, bucket, key)
-}
-
 func (p *bproxy) send_upload_reply(w http.ResponseWriter, req *http.Request,
 		bucket *bucket.Bucket, key string, resp *reply.LookupResult) Reply {
 	reply := reply.Upload {
 		Bucket: bucket.Name,
+		Key: key,
 		Reply:  resp,
-		Primary: reply.Entry {
-			Key:	key,
-			Get:    "GET " + proxy.local_url(key, bucket.Name, "get"),
-			Update: "POST " + proxy.local_url(key, bucket.Name, "upload"),
-			Delete: "POST " + proxy.local_url(key, bucket.Name, "delete"),
-		},
 	}
 
 	reply_json, err := json.Marshal(reply)

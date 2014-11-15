@@ -2,14 +2,9 @@ package reply
 
 import "github.com/bioothod/elliptics-go/elliptics"
 
-type Entry struct {
-	Get    string		`json:"get"`
-	Update string		`json:"update"`
-	Delete string		`json:"delete"`
-	Key    string		`json:"key"`
-}
-
 type LookupServerResult struct {
+	Group		uint32			`json:"group"`
+	Backend		int32			`json:"backend"`
 	IDString	string			`json:"id"`
 	CsumString	string			`json:"csum"`
 	Filename	string			`json:"filename"`
@@ -31,6 +26,6 @@ type LookupResult struct {
 
 type Upload struct {
 	Bucket  string				`json:"bucket"`
-	Primary Entry				`json:"primary"`
+	Key	string				`json:"key"`
 	Reply   *LookupResult			`json:"reply"`
 }
