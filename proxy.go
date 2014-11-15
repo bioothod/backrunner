@@ -171,10 +171,10 @@ func redirect_handler(w http.ResponseWriter, req *http.Request, string_keys ...s
 		}
 	}
 
-	bucket := string_keys[0]
+	bname := string_keys[0]
 	key := string_keys[1]
 
-	reply, err := proxy.bctl.Lookup(bucket, key, req)
+	reply, err := proxy.bctl.Lookup(bname, key, req)
 	if err != nil {
 		return Reply {
 			err: err,
@@ -211,10 +211,33 @@ func redirect_handler(w http.ResponseWriter, req *http.Request, string_keys ...s
 		slash = ""
 	}
 
+	offset, size, err := bucket.URIOffsetSize(req)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, fmt.Sprintf("redirect: %v", err))
+		return Reply {
+			err: err,
+			status: errors.ErrorStatus(err),
+		}
+	}
+
+	if offset >= srv.Size {
+		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
+			fmt.Sprintf("redirect: offset is beyond size of the object: offset: %d, size: %d",
+				offset, srv.Size))
+		return Reply {
+			err: err,
+			status: errors.ErrorStatus(err),
+		}
+	}
+
+	if size == 0 || offset + size >= srv.Size {
+		size = srv.Size - offset
+	}
+
 	timestamp := time.Now().Unix()
 	url_str := fmt.Sprintf("%s://%s:%d%s%s:%d:%d",
 		scheme, srv.Server.HostString(), proxy.conf.Proxy.RedirectPort,
-		slash, filename, srv.Offset, srv.Size)
+		slash, filename, srv.Offset + offset, size)
 
 	u, err := url.Parse(url_str)
 	if err != nil {
@@ -231,9 +254,9 @@ func redirect_handler(w http.ResponseWriter, req *http.Request, string_keys ...s
 
 	w.Header().Set("X-Ell-Mtime", fmt.Sprintf("%d", srv.Info.Mtime.Unix()))
 	w.Header().Set("X-Ell-Signtime", fmt.Sprintf("%d", timestamp))
-	w.Header().Set("X-Ell-SignatureTimeout", fmt.Sprintf("%d", proxy.conf.Proxy.RedirectSignatureTimeout))
-	w.Header().Set("X-Ell-Offset", fmt.Sprintf("%d", srv.Offset))
-	w.Header().Set("X-Ell-Size", fmt.Sprintf("%d", srv.Size))
+	w.Header().Set("X-Ell-Signature-Timeout", fmt.Sprintf("%d", proxy.conf.Proxy.RedirectSignatureTimeout))
+	w.Header().Set("X-Ell-File-Offset", fmt.Sprintf("%d", srv.Offset))
+	w.Header().Set("X-Ell-Total-Size", fmt.Sprintf("%d", srv.Size))
 	w.Header().Set("X-Ell-File", filename)
 
 	signature, err := auth.GenerateSignature(proxy.conf.Proxy.RedirectToken, "GET", req.URL, w.Header())
