@@ -24,7 +24,7 @@ import (
 const (
 	// time to write 1 byte into error bucket in seconds
 	// this is randomly selected error gain for buckets where upload has failed
-	BucketWriteErrorPain float64	= 5000000000.0
+	BucketWriteErrorPain float64	= 10000000000.0
 
 	PainNoStats float64		= 15000000000.0
 	PainStatError float64		= 15000000000.0
