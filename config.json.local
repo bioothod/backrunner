@@ -20,6 +20,10 @@
 		"redirect-port": 8080,
 		"redirect-token": "secure token to sign redirect request",
 		"redirect-signature-timeout": 60,
-		"redirect-root": "/mnt"
+		"redirect-root": "/mnt",
+		"headers": {
+			"X-Ell-Some-Header": "this is a header data",
+			"XXXXXXX": "YYYYYY"
+		}
 	}
 }

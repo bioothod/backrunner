@@ -428,6 +428,10 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 
 	start := time.Now()
 
+	for k, v := range proxy.conf.Proxy.Headers {
+		w.Header().Set(k, v)
+	}
+
 	reply := Reply {
 		status: http.StatusBadRequest,
 		err: errors.NewKeyError(req.URL.String(), http.StatusBadRequest, "there is no registered handler for this path"),

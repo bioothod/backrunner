@@ -133,6 +133,9 @@ type ProxyClientConfig struct {
 
 	// cut this substring from the beginning of the filename sent to the streaming module
 	RedirectRoot string			`json:"redirect-root"`
+
+	// headers added to every reply in a 'key: value' format
+	Headers map[string]string		`json:"headers"`
 }
 
 type ProxyConfig struct {
