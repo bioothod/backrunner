@@ -41,27 +41,6 @@ func GoodReply() Reply {
 	}
 }
 
-func ping_handler(w http.ResponseWriter, r *http.Request, strings ...string) Reply {
-	message := "Ping OK"
-
-	buckets := make([]interface{}, 0)
-
-	for i := range proxy.bctl.Bucket {
-		b := &proxy.bctl.Bucket[i]
-		buckets = append(buckets, b)
-	}
-
-	j, err := json.Marshal(buckets)
-	if err == nil {
-		message = string(j)
-	} else {
-		message = fmt.Sprintf("marshaling error: %v", err)
-	}
-	http.Error(w, message, http.StatusOK)
-
-	return GoodReply()
-}
-
 func (p *bproxy) send_upload_reply(w http.ResponseWriter, req *http.Request,
 		bucket *bucket.Bucket, key string, resp *reply.LookupResult) Reply {
 	reply := reply.Upload {
@@ -428,7 +407,7 @@ var proxy_handlers = map[string]handler {
 	"/ping/" : {
 		params: 0,
 		methods: []string{"GET"},
-		function: ping_handler,
+		function: stat_handler,
 	},
 	"/stat/" : {
 		params: 0,
