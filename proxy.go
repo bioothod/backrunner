@@ -26,7 +26,6 @@ var (
 type bproxy struct {
 	bctl		*bucket.BucketCtl
 	ell		*etransport.Elliptics
-	conf		*config.ProxyConfig
 }
 
 type Reply struct {
@@ -139,10 +138,10 @@ func lookup_handler(w http.ResponseWriter, req *http.Request, strings ...string)
 }
 
 func redirect_handler(w http.ResponseWriter, req *http.Request, string_keys ...string) Reply {
-	if proxy.conf.Proxy.RedirectPort == 0 || proxy.conf.Proxy.RedirectPort >= 65536 {
+	if proxy.bctl.Conf.Proxy.RedirectPort == 0 || proxy.bctl.Conf.Proxy.RedirectPort >= 65536 {
 		err := errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
 				fmt.Sprintf("redirect is not allowed because of invalid redirect port %d",
-					proxy.conf.Proxy.RedirectPort))
+					proxy.bctl.Conf.Proxy.RedirectPort))
 
 		return Reply {
 			err: err,
@@ -179,9 +178,9 @@ func redirect_handler(w http.ResponseWriter, req *http.Request, string_keys ...s
 
 	filename := srv.Filename
 
-	if len(proxy.conf.Proxy.RedirectRoot) != 0{
-		if strings.HasPrefix(filename, proxy.conf.Proxy.RedirectRoot) {
-			filename = filename[len(proxy.conf.Proxy.RedirectRoot):]
+	if len(proxy.bctl.Conf.Proxy.RedirectRoot) != 0{
+		if strings.HasPrefix(filename, proxy.bctl.Conf.Proxy.RedirectRoot) {
+			filename = filename[len(proxy.bctl.Conf.Proxy.RedirectRoot):]
 		}
 	}
 
@@ -215,7 +214,7 @@ func redirect_handler(w http.ResponseWriter, req *http.Request, string_keys ...s
 
 	timestamp := time.Now().Unix()
 	url_str := fmt.Sprintf("%s://%s:%d%s%s:%d:%d",
-		scheme, srv.Server.HostString(), proxy.conf.Proxy.RedirectPort,
+		scheme, srv.Server.HostString(), proxy.bctl.Conf.Proxy.RedirectPort,
 		slash, filename, srv.Offset + offset, size)
 
 	u, err := url.Parse(url_str)
@@ -233,12 +232,12 @@ func redirect_handler(w http.ResponseWriter, req *http.Request, string_keys ...s
 
 	w.Header().Set("X-Ell-Mtime", fmt.Sprintf("%d", srv.Info.Mtime.Unix()))
 	w.Header().Set("X-Ell-Signtime", fmt.Sprintf("%d", timestamp))
-	w.Header().Set("X-Ell-Signature-Timeout", fmt.Sprintf("%d", proxy.conf.Proxy.RedirectSignatureTimeout))
+	w.Header().Set("X-Ell-Signature-Timeout", fmt.Sprintf("%d", proxy.bctl.Conf.Proxy.RedirectSignatureTimeout))
 	w.Header().Set("X-Ell-File-Offset", fmt.Sprintf("%d", srv.Offset))
 	w.Header().Set("X-Ell-Total-Size", fmt.Sprintf("%d", srv.Size))
 	w.Header().Set("X-Ell-File", filename)
 
-	signature, err := auth.GenerateSignature(proxy.conf.Proxy.RedirectToken, "GET", req.URL, w.Header())
+	signature, err := auth.GenerateSignature(proxy.bctl.Conf.Proxy.RedirectToken, "GET", req.URL, w.Header())
 	if err != nil {
 		err := errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
 			fmt.Sprintf("could not generate signature for redirect url '%s': %v", url_str, err))
@@ -421,7 +420,7 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 
 	start := time.Now()
 
-	for k, v := range proxy.conf.Proxy.Headers {
+	for k, v := range proxy.bctl.Conf.Proxy.Headers {
 		w.Header().Set(k, v)
 	}
 
@@ -476,8 +475,8 @@ func (proxy *bproxy) getTimeoutServer(addr string, handler http.Handler) *http.S
 	return &http.Server{
 		Addr:         addr,
 		Handler:      handler,
-		ReadTimeout:  time.Duration(proxy.conf.Proxy.IdleTimeout) * time.Second,
-		WriteTimeout:  time.Duration(proxy.conf.Proxy.IdleTimeout) * time.Second,
+		ReadTimeout:  time.Duration(proxy.bctl.Conf.Proxy.IdleTimeout) * time.Second,
+		WriteTimeout:  time.Duration(proxy.bctl.Conf.Proxy.IdleTimeout) * time.Second,
 	}
 }
 
@@ -509,22 +508,22 @@ func main() {
 
 	var err error
 
-	proxy.conf = &config.ProxyConfig {}
-	err = proxy.conf.Load(*config_file)
+	conf := &config.ProxyConfig {}
+	err = conf.Load(*config_file)
 	if err != nil {
 		log.Fatalf("Could not load config %s: %q", config_file, err)
 	}
 
-	if len(proxy.conf.Proxy.Address) == 0 {
+	if len(conf.Proxy.Address) == 0 {
 		log.Fatalf("'address' must be specified in proxy config '%s'\n", *config_file)
 	}
 
-	if proxy.conf.Proxy.RedirectPort == 0 || proxy.conf.Proxy.RedirectPort >= 65536 {
+	if conf.Proxy.RedirectPort == 0 || conf.Proxy.RedirectPort >= 65536 {
 		log.Printf("redirect is not allowed because of invalid redirect port %d",
-			proxy.conf.Proxy.RedirectPort)
+			conf.Proxy.RedirectPort)
 	}
 
-	proxy.ell, err = etransport.NewEllipticsTransport(proxy.conf)
+	proxy.ell, err = etransport.NewEllipticsTransport(conf)
 	if err != nil {
 		log.Fatalf("Could not create Elliptics transport: %v", err)
 	}
@@ -536,7 +535,7 @@ func main() {
 		log.Fatalf("Could not process buckets file '%s': %v", *buckets, err)
 	}
 
-	server := proxy.getTimeoutServer(proxy.conf.Proxy.Address, http.HandlerFunc(generic_handler))
+	server := proxy.getTimeoutServer(proxy.bctl.Conf.Proxy.Address, http.HandlerFunc(generic_handler))
 
 	log.Fatal(server.ListenAndServe())
 }

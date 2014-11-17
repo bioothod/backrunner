@@ -66,7 +66,7 @@ type BucketCtl struct {
 	e			*etransport.Elliptics
 
 	proxy_config_path	string
-	conf			*config.ProxyConfig
+	Conf			*config.ProxyConfig
 
 	signals			chan os.Signal
 
@@ -202,18 +202,18 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 			}
 
 			free_space_rate := 1.0 - float64(st.VFS.BackendUsedSize + uint64(req.ContentLength)) / float64(st.VFS.TotalSizeLimit)
-			if free_space_rate <= bctl.conf.Proxy.FreeSpaceRatioHard {
+			if free_space_rate <= bctl.Conf.Proxy.FreeSpaceRatioHard {
 				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
 
 				bs.Pain += PainNoFreeSpaceHard
-			} else if free_space_rate <= bctl.conf.Proxy.FreeSpaceRatioSoft {
+			} else if free_space_rate <= bctl.Conf.Proxy.FreeSpaceRatioSoft {
 				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
 
 				bs.Pain += PainNoFreeSpaceSoft
 			} else {
 				bs.SuccessGroups = append(bs.SuccessGroups, group_id)
 
-				free_space_pain := 1.0 / (free_space_rate - bctl.conf.Proxy.FreeSpaceRatioSoft)
+				free_space_pain := 1.0 / (free_space_rate - bctl.Conf.Proxy.FreeSpaceRatioSoft)
 				if free_space_pain >= PainNoFreeSpaceSoft {
 					free_space_pain = PainNoFreeSpaceSoft * 0.8
 				}
@@ -679,7 +679,7 @@ func (bctl *BucketCtl) ReadProxyConfig() error {
 	bctl.Lock()
 	defer bctl.Unlock()
 
-	bctl.conf = conf
+	bctl.Conf = conf
 
 	return nil
 
@@ -781,18 +781,18 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 			case <-bctl.BucketTimer.C:
 				bctl.ReadAllBucketsMeta()
 
-				if bctl.conf.Proxy.BucketUpdateInterval > 0 {
+				if bctl.Conf.Proxy.BucketUpdateInterval > 0 {
 					bctl.RLock()
-					bctl.BucketTimer.Reset(time.Second * time.Duration(bctl.conf.Proxy.BucketUpdateInterval))
+					bctl.BucketTimer.Reset(time.Second * time.Duration(bctl.Conf.Proxy.BucketUpdateInterval))
 					bctl.RUnlock()
 				}
 
 			case <-bctl.BucketStatTimer.C:
 				bctl.BucketStatUpdate()
 
-				if bctl.conf.Proxy.BucketStatUpdateInterval > 0 {
+				if bctl.Conf.Proxy.BucketStatUpdateInterval > 0 {
 					bctl.RLock()
-					bctl.BucketStatTimer.Reset(time.Second * time.Duration(bctl.conf.Proxy.BucketStatUpdateInterval))
+					bctl.BucketStatTimer.Reset(time.Second * time.Duration(bctl.Conf.Proxy.BucketStatUpdateInterval))
 					bctl.RUnlock()
 				}
 
