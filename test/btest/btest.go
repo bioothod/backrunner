@@ -1138,6 +1138,10 @@ func Start(base, proxy_path string) {
 			FreeSpaceRatioHard: bt.free_space_ratio_hard,
 			BucketUpdateInterval: 20,
 			BucketStatUpdateInterval: 1,
+			DefragFreeSpaceLimit: 0.4,
+			DefragRemovedSpaceLimit: 0.1,
+			DefragMaxBuckets: 2,
+			DefragMaxBackendsPerServer: 2
 		},
 	}
 
