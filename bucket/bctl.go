@@ -616,8 +616,9 @@ func (bctl *BucketCtl) BulkDelete(bname string, keys []string, req *http.Request
 }
 
 type BucketStat struct {
-	Group		map[string][]*elliptics.StatGroupData
+	Group		map[string]*elliptics.StatGroupData
 	Meta		*BucketMsgpack
+	NeedRecovery	string
 }
 
 type BctlStat struct {
@@ -636,12 +637,24 @@ func (bctl *BucketCtl) Stat(req *http.Request) (reply *BctlStat, err error) {
 
 	for _, b := range bctl.AllBuckets() {
 		bs := &BucketStat {
-			Group:	make(map[string][]*elliptics.StatGroupData),
+			Group:	make(map[string]*elliptics.StatGroupData),
 			Meta:	&b.Meta,
+			NeedRecovery:	"not-needed",
 		}
 
 		for group, sg := range b.Group {
-			bs.Group[fmt.Sprintf("%d", group)] = sg.StatGroupData()
+			sg_data := sg.StatGroupData()
+			bs.Group[fmt.Sprintf("%d", group)] = sg_data
+
+			for _, tmp := range bs.Group {
+				if tmp.RecordsTotal - tmp.RecordsRemoved != sg_data.RecordsTotal - sg_data.RecordsRemoved {
+					bs.NeedRecovery = "DC"
+				}
+			}
+		}
+
+		if len(bs.Group) != len(b.Meta.Groups) {
+			bs.NeedRecovery = "WHOLE-GROUP"
 		}
 
 		reply.Buckets[b.Name] = bs
