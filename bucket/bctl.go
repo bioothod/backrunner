@@ -615,27 +615,37 @@ func (bctl *BucketCtl) BulkDelete(bname string, keys []string, req *http.Request
 	return
 }
 
-func (bctl *BucketCtl) Stat(req *http.Request) (reply map[string]interface{}, err error) {
-	reply = make(map[string]interface{})
+type BucketStat struct {
+	Group		map[string][]*elliptics.StatGroupData
+	Meta		*BucketMsgpack
+}
 
-	buckets := make(map[string]interface{})
+type BctlStat struct {
+	Buckets		map[string]*BucketStat
+	StatTime	string
+}
 
+func (bctl *BucketCtl) Stat(req *http.Request) (reply *BctlStat, err error) {
 	bctl.RLock()
 	defer bctl.RUnlock()
 
-	for _, b := range bctl.AllBuckets() {
-		buckets[b.Name], err = b.Stat()
-		if err != nil {
-			buckets[b.Name] = err_struct {
-				Error: err.Error(),
-			}
-			err = nil
-			return
-		}
+	reply = &BctlStat {
+		Buckets:		make(map[string]*BucketStat),
+		StatTime:		bctl.StatTime.String(),
 	}
 
-	reply["stat_time"] = bctl.StatTime.String()
-	reply["buckets"] = buckets
+	for _, b := range bctl.AllBuckets() {
+		bs := &BucketStat {
+			Group:	make(map[string][]*elliptics.StatGroupData),
+			Meta:	&b.Meta,
+		}
+
+		for group, sg := range b.Group {
+			bs.Group[fmt.Sprintf("%d", group)] = sg.StatGroupData()
+		}
+
+		reply.Buckets[b.Name] = bs
+	}
 
 	return
 }

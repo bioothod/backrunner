@@ -195,21 +195,6 @@ func NewBucket(name string) *Bucket {
 	}
 }
 
-func (b *Bucket) Stat() (reply map[string]interface{}, err error) {
-	reply = make(map[string]interface{})
-
-	g := make(map[string]interface{})
-	for group, stat := range b.Group {
-		g[fmt.Sprintf("%d", group)] = stat.StatGroupData()
-	}
-	reply["groups"] = g
-	reply["meta"] = b.Meta
-
-	err = nil
-	return
-}
-
-
 func (b *Bucket) check_auth(r *http.Request, required_flags uint64) (err error) {
 	if len(b.Meta.Acl) == 0 {
 		err = nil
