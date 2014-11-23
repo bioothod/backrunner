@@ -646,8 +646,8 @@ func test_uniform_free_space(t *BackrunnerTest) error {
 			return fmt.Errorf("there is no IO bucket '%s' in the statistics, check out logs\n", bname)
 		}
 
-		for group_id, group := range bucket.Groups {
-			for _, ab := range group {
+		for group_id, group := range bucket.Group {
+			for _, ab := range group.Backends {
 				sb := ab.Stat
 				rate := float64(sb.VFS.TotalSizeLimit - sb.VFS.BackendUsedSize) / float64(sb.VFS.TotalSizeLimit)
 
@@ -758,12 +758,18 @@ type StatAB struct {
 	Stat		*elliptics.StatBackend
 
 }
+type GroupStat struct {
+	Backends		[]StatAB
+	RecordsTotal		uint64
+	RecordsRemoved		uint64
+	RecordsCorrupted	uint64
+}
 type BStat struct {
-	Groups		map[string][]StatAB			`json:"groups"`
-	Meta		bucket.BucketMsgpack			`json:"meta"`
+	Group		map[string]GroupStat
+	Meta		bucket.BucketMsgpack
 }
 type Stat struct {
-	Buckets		map[string]BStat		`json:"buckets"`
+	Buckets		map[string]BStat
 }
 
 func (t *BackrunnerTest) parse_stat() (*Stat, error) {
@@ -798,8 +804,8 @@ func (st *Stat) total_operations(bname, command string) uint64 {
 
 	bucket, ok := st.Buckets[bname]
 	if ok {
-		for _, group := range bucket.Groups {
-			for _, ab := range group {
+		for _, group := range bucket.Group {
+			for _, ab := range group.Backends {
 				cmd, ok := ab.Stat.Commands[command]
 				if ok {
 					operations += cmd.RequestsSuccess
@@ -1039,8 +1045,8 @@ func test_backend_slowdown(t *BackrunnerTest) error {
 		return err
 	}
 
-	if cnt_biggest / cnt_smallest < 5 {
-		return fmt.Errorf("invalid distribution (diff must be more than several times, 5 in the code) in the slow run test: smallest: %d, biggest: %d",
+	if cnt_biggest / cnt_smallest < 3 {
+		return fmt.Errorf("invalid distribution (diff must be more than several times, 3 in the code) in the slow run test: smallest: %d, biggest: %d",
 		cnt_smallest, cnt_biggest)
 	}
 
