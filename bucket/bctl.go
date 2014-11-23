@@ -229,8 +229,8 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 
 			bs.Pain += st.PID.Pain
 
-			log.Printf("find-bucket: bucket: %s, group: %d: free-space-rate: %f, backend-pain: %f, pain: %f\n",
-				b.Name, group_id, free_space_rate, st.PID.Pain, bs.Pain)
+			log.Printf("find-bucket: url: %s, bucket: %s, group: %d: content-length: %d, free-space-rate: %f, backend-pain: %f, pain: %f\n",
+				req.URL.String(), b.Name, group_id, req.ContentLength, free_space_rate, st.PID.Pain, bs.Pain)
 		}
 
 		total_groups := len(bs.SuccessGroups) + len(bs.ErrorGroups)
@@ -241,8 +241,8 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 
 		bs.Pain += float64(diff) * PainNoGroup
 
-		log.Printf("find-bucket: bucket: %s, groups: %v, success-groups: %v, error-groups: %v, pain: %f\n",
-			b.Name, b.Meta.Groups, bs.SuccessGroups, bs.ErrorGroups, bs.Pain)
+		log.Printf("find-bucket: url: %s, bucket: %s, content-length: %d, groups: %v, success-groups: %v, error-groups: %v, pain: %f\n",
+			req.URL.String(), b.Name, req.ContentLength, b.Meta.Groups, bs.SuccessGroups, bs.ErrorGroups, bs.Pain)
 
 		// do not even consider buckets without free space even in one group
 		if bs.Pain >= PainNoFreeSpaceHard {
