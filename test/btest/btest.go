@@ -600,6 +600,7 @@ func test_nobucket_upload(t *BackrunnerTest) error {
 }
 
 func test_uniform_free_space(t *BackrunnerTest) error {
+	the_last_chance := true
 	for {
 		key := strconv.FormatInt(rand.Int63(), 16)
 
@@ -626,8 +627,19 @@ func test_uniform_free_space(t *BackrunnerTest) error {
 		if resp.StatusCode != http.StatusOK {
 			log.Printf("status: '%s', url: '%s', headers: req: %v, resp: %v, data-received: %s",
 				resp.Status, resp.Request.URL.String(), resp.Request.Header, resp.Header, string(resp_data))
+
+			if the_last_chance {
+				the_last_chance = false
+				time.Sleep(time.Second * 35)
+				continue
+			}
+
 			break
 		}
+
+		// this 'last-chance' logic is simple - give it some time to run defragmentation
+		// if we can write data into the storage - allow another last chance
+		the_last_chance = true
 	}
 
 	// there should be no free space in any IO bucket, let's check it
