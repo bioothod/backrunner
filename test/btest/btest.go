@@ -110,8 +110,8 @@ func (t *BackrunnerTest) check_upload_reply(bucket, key string, resp *http.Respo
 		return nil, fmt.Errorf("invalid reply '%s': %s", string(resp_data), err.Error())
 	}
 
-	if rep.Primary.Key != key {
-		return nil, fmt.Errorf("invalid reply '%s': keys do not match: sent: '%s', recv: '%s'", string(resp_data), key, rep.Primary.Key)
+	if rep.Key != key {
+		return nil, fmt.Errorf("invalid reply '%s': keys do not match: sent: '%s', recv: '%s'", string(resp_data), key, rep.Key)
 	}
 
 	if rep.Bucket == "" {
@@ -1047,6 +1047,21 @@ func test_backend_slowdown(t *BackrunnerTest) error {
 	delay = 0
 	s.BackendSetDelay(&addr, backend_id, delay)
 
+	time.Sleep(2 * time.Second)
+
+	cnt_smallest, cnt_biggest, err = t.gather_write_stats(num)
+	if err != nil {
+		return err
+	}
+
+	// this should be roughly the same number of write hits per bucket,
+	// since no bucket has been slown down
+	if float64(cnt_biggest) / float64(cnt_smallest) > 2 {
+		return fmt.Errorf("invalid distribution (should be rougly the same, i.e. difference < 0.5) in the SECOND equal run test: smallest: %d, biggest: %d",
+		cnt_smallest, cnt_biggest)
+	}
+
+
 	return nil
 }
 
@@ -1141,7 +1156,7 @@ func Start(base, proxy_path string) {
 			DefragFreeSpaceLimit: 0.4,
 			DefragRemovedSpaceLimit: 0.1,
 			DefragMaxBuckets: 2,
-			DefragMaxBackendsPerServer: 2
+			DefragMaxBackendsPerServer: 2,
 		},
 	}
 
