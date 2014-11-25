@@ -269,39 +269,29 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 		return nil
 	}
 
+	var sum int64 = 0
 	for {
-		need_multiple := false
-		multiple := 10.0
+		sum = 0
+		var multiple int64 = 10
 
 		for _, bs := range stat {
-			if bs.Range < multiple {
-				need_multiple = true
-
-				tmp := multiple / bs.Range
-				if tmp > multiple {
-					multiple = tmp
-				}
-
-				break
-			}
+			sum += int64(bs.Range)
 		}
 
-		if !need_multiple {
+		if sum >= multiple {
 			break
 		} else {
 			for _, bs := range stat {
-				bs.Range *= multiple
+				bs.Range *= float64(multiple)
 			}
 		}
-	}
-
-	var sum float64 = 0.0
-	for _, bs := range stat {
-		sum += bs.Range
 	}
 
 	r := rand.Int63n(int64(sum))
 	for _, bs := range stat {
+		log.Printf("find-bucket: bucket: %s, pain: %f, range: %f, sum: %d, r: %d\n",
+			bs.Bucket.Name, bs.Pain, bs.Range, sum, r)
+
 		r -= int64(bs.Range)
 		if r <= 0 {
 			log.Printf("find-bucket: selected bucket: %s, groups: %v, pain: %f\n",
@@ -361,11 +351,11 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 	// PID controller should aim at some destination performance point
 	// it can be velocity pf the vehicle or deisred write rate
 	//
-	// Let's consider our desired control point as number of useconds  needed to write 1 byte into the storage
-	// In the ideal world it will be 0.01 or 100 MB/s write speed
+	// Let's consider our desired control point as number of useconds needed to write 1 byte into the storage
+	// In the ideal world it would be zero
 
 	time_us := time.Since(start).Nanoseconds() / 1000
-	e := float64(time_us) / float64(total_size) - 0.01
+	e := float64(time_us) / float64(total_size)
 
 	bctl.Lock()
 
