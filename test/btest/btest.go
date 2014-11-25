@@ -622,7 +622,7 @@ func test_uniform_free_space(t *BackrunnerTest) error {
 			return err
 		}
 
-		time.Sleep(time.Millisecond * 100)
+		time.Sleep(time.Millisecond * 500)
 
 		if resp.StatusCode != http.StatusOK {
 			log.Printf("status: '%s', url: '%s', headers: req: %v, resp: %v, data-received: %s",
