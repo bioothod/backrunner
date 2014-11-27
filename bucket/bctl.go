@@ -325,6 +325,12 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 		return
 	}
 
+	if total_size == 0 {
+		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
+			"upload: attempting to perform invalid zero-length upload")
+		return
+	}
+
 	s, err := bctl.e.DataSession(req)
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
