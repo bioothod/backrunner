@@ -70,7 +70,7 @@ func (bt *BackrunnerTest) StartEllipticsServer() {
 			Blob_Flags: 0, // bit 4 must not be set to enable blob-size-limit check
 			Blob_Size: "20M",
 			Records_In_Blob: 1000,
-			Blob_Size_Limit: fmt.Sprintf("%dM", 60 + rand.Intn(5) * 20),
+			Blob_Size_Limit: fmt.Sprintf("%dM", 100 + rand.Intn(5) * 20),
 			PeriodicTimeout: 30,
 		}
 

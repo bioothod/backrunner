@@ -516,7 +516,7 @@ func test_bucket_bulk_delete(t *BackrunnerTest) error {
 		keys = append(keys, key)
 
 		// [1, 1+100) kbytes
-		total_size := 1024 * (rand.Int31n(100) + 1)
+		total_size := rand.Int31n(1000) + 100
 		buf := make([]byte, total_size)
 		body := bytes.NewReader(buf)
 		req := t.NewRequest("POST", "upload", t.all_allowed_user, t.all_allowed_token, bucket, key, 0, 0, body)
@@ -1022,7 +1022,7 @@ func (t *BackrunnerTest) gather_write_stats(num int) (cnt_smallest, cnt_biggest 
 }
 
 func test_backend_slowdown(t *BackrunnerTest) error {
-	num := 100
+	num := 1000
 	cnt_smallest, cnt_biggest, err := t.gather_write_stats(num)
 	if err != nil {
 		return err
