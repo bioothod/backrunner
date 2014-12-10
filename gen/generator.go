@@ -26,6 +26,8 @@ func main() {
 	blob_flags := flag.Uint64("blob_flags", 0, "blob flags")
 	blob_size := flag.String("blob_size", "10M", "blob size")
 	blob_size_limit := flag.String("blob_size_limit", "", "maximum total size of all blobs")
+	backend_type := flag.String("type", "blob", "backend type")
+	defrag_percentage := flag.Int("defrag_percentage", 10, "defrag percentage")
 
 	flag.Parse()
 
@@ -79,6 +81,8 @@ func main() {
 		b.Sync = *sync
 		b.Blob_Flags = *blob_flags
 		b.Blob_Size = *blob_size
+		b.DefragPercentage = *defrag_percentage
+		b.Type = *backend_type
 
 		if *blob_size_limit != "" {
 			b.Blob_Size_Limit = *blob_size_limit
@@ -104,6 +108,7 @@ func main() {
 			}
 
 			setup_backend(b)
+			config.Backends = append(config.Backends, *b)
 		}
 	}
 
