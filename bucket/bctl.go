@@ -190,7 +190,7 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 		}
 
 		for group_id, sg := range b.Group {
-			st, err := sg.FindStatBackend(s, key, group_id)
+			st, err := sg.FindStatBackendKey(s, key, group_id)
 			if err != nil {
 				// there is no statistics for given address+backend, which should host our data
 				// do not allow to write into the bucket which contains given address+backend
@@ -368,35 +368,38 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 
 	bctl.Lock()
 
-	for _, group_id := range reply.SuccessGroups {
-		sg, ok := bucket.Group[group_id]
+	for _, res := range reply.Servers {
+		sg, ok := bucket.Group[res.Group]
 		if ok {
-			st, back_err := sg.FindStatBackend(s, key, group_id)
+			st, back_err := sg.FindStatBackend(res.Server, res.Backend)
 			if back_err == nil {
 				old_pain := st.PID.Pain
-				st.PIDUpdate(e)
+				update_pain := e
+				estring := "ok"
 
-				log.Printf("bucket-upload: bucket: %s, key: %s, size: %d, time: %d us, success group: %d, e: %f, pain: %f -> %f\n",
-					bucket.Name, key, total_size, time_us, group_id, e, old_pain, st.PID.Pain)
+				if res.Error != nil {
+					update_pain = BucketWriteErrorPain
+					estring = res.Error.Error()
+				}
+				st.PIDUpdate(update_pain)
+
+				log.Printf("bucket-upload: bucket: %s, key: %s, size: %d, time: %d us, group: %d, e: %f, error: %v, pain: %f -> %f\n",
+					bucket.Name, key, total_size, time_us, res.Group, e, estring, old_pain, st.PID.Pain)
 			}
 		}
 	}
 
-	error_groups := reply.ErrorGroups
 	if len(reply.SuccessGroups) == 0 {
-		error_groups = bucket.Meta.Groups
-	}
+		for _, group_id := range bucket.Meta.Groups {
+			sg, ok := bucket.Group[group_id]
+			if ok {
+				st, back_err := sg.FindStatBackendKey(s, key, group_id)
+				if back_err == nil {
+					old_pain := st.PID.Pain
 
-	for _, group_id := range error_groups {
-		sg, ok := bucket.Group[group_id]
-		if ok {
-			st, back_err := sg.FindStatBackend(s, key, group_id)
-			if back_err == nil {
-				old_pain := st.PID.Pain
-				st.PIDUpdate(BucketWriteErrorPain)
-
-				log.Printf("bucket-upload: bucket: %s, key: %s, size: %d, time: %d us, error group: %d, e: %f, pain: %f -> %f\n",
-					bucket.Name, key, total_size, time_us, group_id, e, old_pain, st.PID.Pain)
+					log.Printf("bucket-upload: bucket: %s, key: %s, size: %d, time: %d us, error group: %d, e: %f, pain: %f -> %f\n",
+						bucket.Name, key, total_size, time_us, group_id, e, old_pain, st.PID.Pain)
+				}
 			}
 		}
 	}
@@ -806,7 +809,7 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 		DefragTime:		time.Now(),
 	}
 
-	runtime.SetBlockProfileRate(1000000)
+	runtime.SetBlockProfileRate(1000)
 
 	err = bctl.ReadConfig()
 	if err != nil {
