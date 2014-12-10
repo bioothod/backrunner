@@ -29,6 +29,10 @@ type Logger struct {
 }
 type Monitor struct {
 	Port int32				`json:"port"`
+	CallTreeTimeout int32			`json:"call_tree_timeout"`
+}
+type Cache struct {
+	Size uint64				`json:"size"`
 }
 type Options struct {
 	Join bool				`json:"join"`
@@ -43,6 +47,7 @@ type Options struct {
 	Daemon bool				`json:"daemon"`
 	Auth_Cookie string			`json:"auth_cookie"`
 	Monitor Monitor				`json:"monitor"`
+	//Cache Cache				`json:"cache"`
 }
 
 type Backend struct {
@@ -63,7 +68,6 @@ type EllipticsServerConfig struct {
 	Logger Logger				`json:"logger"`
 	Options Options				`json:"options"`
 	Backends []Backend			`json:"backends"`
-
 }
 
 func (config *EllipticsServerConfig) Save(file string) (err error) {
