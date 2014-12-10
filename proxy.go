@@ -338,7 +338,7 @@ func bulk_delete_handler(w http.ResponseWriter, req *http.Request, strings ...st
 }
 
 func common_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
-	key := "/usr/share/nginx/www/crossdomain.xml"
+	key := "/mnt/elliptics/etc/crossdomain.xml"
 
 	data, err := ioutil.ReadFile(key)
 	if err != nil {
