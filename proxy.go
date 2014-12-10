@@ -10,6 +10,7 @@ import (
 	"github.com/bioothod/backrunner/bucket"
 	"github.com/bioothod/backrunner/etransport"
 	"github.com/bioothod/backrunner/reply"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"net/http"
@@ -336,6 +337,25 @@ func bulk_delete_handler(w http.ResponseWriter, req *http.Request, strings ...st
 	return GoodReply()
 }
 
+func common_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
+	key := "/usr/share/nginx/www/crossdomain.xml"
+
+	data, err := ioutil.ReadFile(key)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
+			fmt.Sprintf("crossdomain: could not read file '%s': %q", key, err))
+		return Reply {
+			err: err,
+			status: http.StatusServiceUnavailable,
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(data)
+
+	return GoodReply()
+}
+
 func stat_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
 	reply, err := proxy.bctl.Stat(req)
 	if err != nil {
@@ -412,6 +432,11 @@ var proxy_handlers = map[string]handler {
 		params: 0,
 		methods: []string{"GET"},
 		function: stat_handler,
+	},
+	"/crossdomain.xml" : {
+		params: 0,
+		methods: []string{"GET"},
+		function: common_handler,
 	},
 }
 
