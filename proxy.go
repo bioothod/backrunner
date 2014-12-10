@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/url"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -440,6 +441,21 @@ var proxy_handlers = map[string]handler {
 	},
 }
 
+func get_content_length(header http.Header) uint64 {
+	var content_length uint64 = 0
+
+	lheader, ok := header["Content-Length"]
+	if ok {
+		var err error
+		content_length, err = strconv.ParseUint(lheader[0], 0, 64)
+		if err != nil {
+			content_length = 0
+		}
+	}
+
+	return content_length
+}
+
 func generic_handler(w http.ResponseWriter, req *http.Request) {
 	// join together sequential // in the URL path
 
@@ -448,6 +464,8 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 	for k, v := range proxy.bctl.Conf.Proxy.Headers {
 		w.Header().Set(k, v)
 	}
+
+	content_length := get_content_length(req.Header)
 
 	reply := Reply {
 		status: http.StatusBadRequest,
@@ -487,8 +505,13 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 		msg = reply.err.Error()
 	}
 
-	log.Printf("access_log: method: '%s', path: '%s', encoded-uri: '%s', status: %d, duration: %.3f ms, err: '%v'\n",
-		req.Method, path, req.URL.RequestURI(), reply.status, float64(time.Since(start).Nanoseconds()) / 1000000.0, msg)
+	if content_length == 0 {
+		content_length = get_content_length(w.Header())
+	}
+
+	log.Printf("access_log: method: '%s', path: '%s', encoded-uri: '%s', status: %d, size: %d, time: %.3f ms, err: '%v'\n",
+		req.Method, path, req.URL.RequestURI(), reply.status, content_length,
+		float64(time.Since(start).Nanoseconds()) / 1000000.0, msg)
 
 	if reply.err != nil {
 		http.Error(w, reply.err.Error(), reply.status)
