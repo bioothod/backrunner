@@ -14,6 +14,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"sync"
@@ -725,11 +727,11 @@ func (bctl *BucketCtl) ReadConfig() error {
 	return nil
 }
 
-func (bctl *BucketCtl) ReadBucketsMetaNolock(buckets []*Bucket) (new_buckets []*Bucket, err error) {
-	new_buckets = make([]*Bucket, 0, len(buckets))
+func (bctl *BucketCtl) ReadBucketsMetaNolock(names []string) (new_buckets []*Bucket, err error) {
+	new_buckets = make([]*Bucket, 0, len(names))
 
-	for _, b := range buckets {
-		rb, err := ReadBucket(bctl.e, b.Name)
+	for _, name := range names {
+		rb, err := ReadBucket(bctl.e, name)
 		if err != nil {
 			continue
 		}
@@ -739,7 +741,7 @@ func (bctl *BucketCtl) ReadBucketsMetaNolock(buckets []*Bucket) (new_buckets []*
 
 	if len(new_buckets) == 0 {
 		new_buckets = nil
-		err = fmt.Errorf("read-buckets-meta: could not read any bucket from %d requested", len(buckets))
+		err = fmt.Errorf("read-buckets-meta: could not read any bucket from %d requested", len(names))
 		return
 	}
 
@@ -747,23 +749,31 @@ func (bctl *BucketCtl) ReadBucketsMetaNolock(buckets []*Bucket) (new_buckets []*
 }
 
 func (bctl *BucketCtl) ReadAllBucketsMeta() (err error) {
-	var new_buckets, new_back_buckets []*Bucket
+	bnames := make([]string, 0)
+	bback_names := make([]string, 0)
 
 	bctl.RLock()
 	if len(bctl.Bucket) != 0 {
-		new_buckets, err = bctl.ReadBucketsMetaNolock(bctl.Bucket)
-		if err != nil {
-			log.Printf("read-all-buckets-meta: could not read buckets: %v\n", err)
+		for _, b := range bctl.Bucket {
+			bnames = append(bnames, b.Name)
 		}
 	}
-
 	if len(bctl.BackBucket) != 0 {
-		new_back_buckets, err = bctl.ReadBucketsMetaNolock(bctl.BackBucket)
-		if err != nil {
-			log.Printf("read-all-buckets-meta: could not read back buckets: %v\n", err)
+		for _, b := range bctl.BackBucket {
+			bback_names = append(bnames, b.Name)
 		}
 	}
 	bctl.RUnlock()
+
+
+	new_buckets, err := bctl.ReadBucketsMetaNolock(bnames)
+	if err != nil {
+		log.Printf("read-all-buckets-meta: could not read buckets: %v\n", err)
+	}
+	new_back_buckets, err := bctl.ReadBucketsMetaNolock(bback_names)
+	if err != nil {
+		log.Printf("read-all-buckets-meta: could not read back buckets: %v\n", err)
+	}
 
 	bctl.Lock()
 	if new_buckets != nil {
@@ -796,6 +806,8 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 		DefragTime:		time.Now(),
 	}
 
+	runtime.SetBlockProfileRate(1000000)
+
 	err = bctl.ReadConfig()
 	if err != nil {
 		return
@@ -803,6 +815,22 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 	bctl.BucketStatUpdate()
 
 	signal.Notify(bctl.signals, syscall.SIGHUP)
+
+	go func() {
+		for {
+			file, err := os.OpenFile("/tmp/backrunner.profile", os.O_RDWR | os.O_TRUNC | os.O_CREATE, 0644)
+			if err != nil {
+				return
+			}
+
+			pprof.Lookup("block").WriteTo(file, 2)
+
+			file.Close()
+
+			time.Sleep(30 * time.Second)
+		}
+	}()
+
 	go func() {
 		for {
 			select {
