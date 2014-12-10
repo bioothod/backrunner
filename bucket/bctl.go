@@ -131,7 +131,6 @@ func (bctl *BucketCtl) BucketStatUpdate() (err error) {
 	}
 
 	bctl.Lock()
-	defer bctl.Unlock()
 
 	bctl.StatTime = stat.Time
 
@@ -147,6 +146,8 @@ func (bctl *BucketCtl) BucketStatUpdate() (err error) {
 			}
 		}
 	}
+
+	bctl.Unlock()
 
 	// run defragmentation scan
 	bctl.ScanBuckets()

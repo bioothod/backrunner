@@ -30,11 +30,55 @@ func (stats bstat_sorter) Less(i, j int) bool {
 	return stats.defrag[i].removed_space_rate < stats.defrag[j].removed_space_rate
 }
 
-// must be called when @bctl is locked
+// called without locks
+func (bctl *BucketCtl) DefragBuckets(defrag_buckets []bstat) {
+	if len(defrag_buckets) <= 0 {
+		return
+	}
+
+	sorter := bstat_sorter {
+		defrag: defrag_buckets,
+	}
+	sort.Sort(sorter)
+
+	db := make(map[*Bucket]int)
+	addrs := make(map[elliptics.RawAddr]int)
+
+	s, err := elliptics.NewSession(bctl.e.Node)
+	if err != nil {
+		log.Printf("defag: could not create new session: %v\n", err)
+		return
+	}
+
+	for idx := len(defrag_buckets) - 1; idx >= 0; idx-- {
+		b := &defrag_buckets[idx]
+
+		addrs[b.ab.Addr]++
+		defrag_backends_on_storage := addrs[b.ab.Addr]
+
+		if defrag_backends_on_storage <= bctl.Conf.Proxy.DefragMaxBackendsPerServer {
+			log.Printf("defrag: starting defragmentation in bucket: %s, %s, free-space-rate: %f, removed-space-rate: %f\n",
+						b.bucket.Name, b.ab.String(), b.free_space_rate, b.removed_space_rate)
+
+			for _ = range s.BackendStartDefrag(b.ab.Addr.DnetAddr(), b.ab.Backend) {
+			}
+
+			db[b.bucket]++
+			if len(db) >= bctl.Conf.Proxy.DefragMaxBuckets {
+				break
+			}
+		}
+	}
+
+	return
+}
+
 func (bctl *BucketCtl) ScanBuckets() {
 	if time.Since(bctl.DefragTime).Seconds() <= 30 {
 		return
 	}
+
+	bctl.Lock()
 
 	bctl.DefragTime = time.Now()
 	log.Printf("defrag: starting defrag scanning\n")
@@ -111,38 +155,9 @@ func (bctl *BucketCtl) ScanBuckets() {
 		}
 	}
 
-	sorter := bstat_sorter {
-		defrag: defrag_buckets,
-	}
-	sort.Sort(sorter)
+	bctl.Unlock()
 
-	db := make(map[*Bucket]int)
-	addrs := make(map[elliptics.RawAddr]int)
-
-	s, err := elliptics.NewSession(bctl.e.Node)
-	if err != nil {
-		log.Printf("defag: could not create new session: %v\n", err)
-		return
-	}
-
-	for idx := len(defrag_buckets) - 1; idx >= 0; idx-- {
-		b := &defrag_buckets[idx]
-
-		addrs[b.ab.Addr]++
-		defrag_backends_on_storage := addrs[b.ab.Addr]
-
-		if defrag_backends_on_storage <= bctl.Conf.Proxy.DefragMaxBackendsPerServer {
-			log.Printf("defrag: starting defragmentation in bucket: %s, %s, free-space-rate: %f, removed-space-rate: %f\n",
-						b.bucket.Name, b.ab.String(), b.free_space_rate, b.removed_space_rate)
-
-			s.BackendStartDefrag(b.ab.Addr.DnetAddr(), b.ab.Backend)
-
-			db[b.bucket]++
-			if len(db) >= bctl.Conf.Proxy.DefragMaxBuckets {
-				break
-			}
-		}
-	}
+	bctl.DefragBuckets(defrag_buckets)
 
 	return
 }
