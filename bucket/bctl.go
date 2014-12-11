@@ -821,11 +821,12 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 
 	go func() {
 		for {
-			file, err := os.OpenFile("/tmp/backrunner.profile", os.O_RDWR | os.O_TRUNC | os.O_CREATE, 0644)
+			file, err := os.OpenFile("/mnt/elliptics/log/backrunner.profile", os.O_RDWR | os.O_APPEND | os.O_CREATE, 0644)
 			if err != nil {
 				return
 			}
 
+			fmt.Fprintf(file, "profile dump: %s\n", time.Now().String())
 			pprof.Lookup("block").WriteTo(file, 2)
 
 			file.Close()
