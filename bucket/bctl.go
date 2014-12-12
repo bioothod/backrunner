@@ -30,6 +30,7 @@ const (
 
 	PainNoStats float64		= 15000000000.0
 	PainStatError float64		= 15000000000.0
+	PainStatRO float64		= 15000000000.0
 	PainNoGroup float64		= 15000000000.0
 	PainNoFreeSpaceSoft float64	= 5000000000.0
 	PainNoFreeSpaceHard float64	= 50000000000.0
@@ -207,6 +208,13 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
 
 				bs.Pain += PainStatError
+				continue
+			}
+
+			if st.RO {
+				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
+
+				bs.Pain += PainStatRO
 				continue
 			}
 
