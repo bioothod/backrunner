@@ -832,9 +832,9 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 		return
 	}
 	bctl.ReadAllBucketsMeta()
+	signal.Notify(bctl.signals, syscall.SIGHUP)
 	return
 
-	signal.Notify(bctl.signals, syscall.SIGHUP)
 
 	go func() {
 		for {
