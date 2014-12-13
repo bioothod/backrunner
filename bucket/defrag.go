@@ -74,13 +74,11 @@ func (bctl *BucketCtl) DefragBuckets(defrag_buckets []bstat) {
 }
 
 func (bctl *BucketCtl) ScanBuckets() {
-	return
-
 	if time.Since(bctl.DefragTime).Seconds() <= 30 {
 		return
 	}
 
-	bctl.Lock()
+	bctl.RLock()
 
 	bctl.DefragTime = time.Now()
 	log.Printf("defrag: starting defrag scanning\n")
@@ -157,7 +155,7 @@ func (bctl *BucketCtl) ScanBuckets() {
 		}
 	}
 
-	bctl.Unlock()
+	bctl.RUnlock()
 
 	bctl.DefragBuckets(defrag_buckets)
 
