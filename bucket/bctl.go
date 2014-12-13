@@ -684,10 +684,7 @@ func (bctl *BucketCtl) ReadBucketConfig() error {
 		return err
 	}
 
-	bctl.Lock()
-	defer bctl.Unlock()
-
-	bctl.Bucket = make([]*Bucket, 0, 0)
+	new_buckets := make([]*Bucket, 0, 0)
 
 	for _, name := range strings.Split(string(data), "\n") {
 		if len(name) > 0 {
@@ -697,16 +694,20 @@ func (bctl *BucketCtl) ReadBucketConfig() error {
 				continue
 			}
 
-			bctl.Bucket = append(bctl.Bucket, b)
+			new_buckets = append(new_buckets, b)
 			log.Printf("config: new bucket: %s\n", b.Meta.String())
 		}
 	}
 
-	if len(bctl.Bucket) == 0 {
+	if len(new_buckets) == 0 {
 		err = fmt.Errorf("No buckets found in bucket file '%s'", bctl.bucket_path)
 		log.Printf("config: %v\n", err)
 		return err
 	}
+
+	bctl.Lock()
+	bctl.Bucket = new_buckets
+	bctl.Unlock()
 
 	return nil
 }
@@ -719,9 +720,8 @@ func (bctl *BucketCtl) ReadProxyConfig() error {
 	}
 
 	bctl.Lock()
-	defer bctl.Unlock()
-
 	bctl.Conf = conf
+	bctl.Unlock()
 
 	return nil
 
@@ -820,7 +820,7 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 		BackBucket:		make([]*Bucket, 0, 10),
 
 		BucketTimer:		time.NewTimer(time.Second * 30),
-		BucketStatTimer:	time.NewTimer(time.Second * 20),
+		BucketStatTimer:	time.NewTimer(time.Second * 10),
 
 		DefragTime:		time.Now(),
 	}
@@ -832,9 +832,8 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 		return
 	}
 	bctl.ReadAllBucketsMeta()
-	signal.Notify(bctl.signals, syscall.SIGHUP)
-	return
 
+	signal.Notify(bctl.signals, syscall.SIGHUP)
 
 	go func() {
 		for {
