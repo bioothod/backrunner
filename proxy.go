@@ -509,6 +509,12 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 		err: errors.NewKeyError(req.URL.String(), http.StatusBadRequest, "there is no registered handler for this path"),
 	}
 
+	if req.Method == "HEAD" {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+		return
+	}
+
 	path, err := url.QueryUnescape(req.URL.Path)
 	if err != nil {
 		path = req.URL.Path
