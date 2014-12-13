@@ -162,8 +162,6 @@ func (bctl *BucketCtl) BucketStatUpdate() (err error) {
 }
 
 func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket) {
-	return bctl.Bucket[rand.Intn(len(bctl.Bucket))]
-
 	s, err := bctl.e.MetadataSession()
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
