@@ -832,7 +832,7 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 	if err != nil {
 		return
 	}
-	bctl.BucketStatUpdate()
+	bctl.ReadAllBucketsMeta()
 
 	signal.Notify(bctl.signals, syscall.SIGHUP)
 
