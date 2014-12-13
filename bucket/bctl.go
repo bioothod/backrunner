@@ -170,9 +170,6 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 		return bctl.Bucket[rand.Intn(len(bctl.Bucket))]
 	}
 
-	bctl.RLock()
-	defer bctl.RUnlock()
-
 	type bucket_stat struct {
 		Bucket		*Bucket
 		SuccessGroups	[]uint32
