@@ -366,6 +366,7 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 
 	reply, err = bucket.lookup_serialize(true, s.WriteData(key, req.Body, offset, total_size))
 
+	return
 
 	// PID controller should aim at some destination performance point
 	// it can be velocity pf the vehicle or deisred write rate
