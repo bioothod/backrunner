@@ -409,58 +409,69 @@ func stat_handler(w http.ResponseWriter, req *http.Request, strings ...string) R
 }
 
 type handler struct {
-	params			int // minimal number of path components after /handler/ needed to run this handler
-	methods			[]string // GET, POST and so on - methods which are allowed to be used with this handler
+	name			string		// handler's name
+	params			int		// minimal number of path components after /handler/ needed to run this handler
+	methods			[]string	// GET, POST and so on - methods which are allowed to be used with this handler
 	function		func(w http.ResponseWriter, req *http.Request, v...string) Reply
 }
 
-var proxy_handlers = map[string]handler {
-	"/nobucket_upload/" : {
+var proxy_handlers = []handler {
+	{
+		name: "/nobucket_upload/",
 		params:	1,
 		methods: []string{"POST", "PUT"},
 		function: nobucket_upload_handler,
 	},
-	"/upload/" : {
+	{
+		name: "/upload/",
 		params: 2,
 		methods: []string{"POST", "PUT"},
 		function: bucket_upload_handler,
 	},
-	"/get/" : {
+	{
+		name: "/get/",
 		params: 2,
 		methods: []string{"GET"},
 		function: get_handler,
 	},
-	"/lookup/" : {
+	{
+		name: "/lookup/",
 		params: 2,
 		methods: []string{"GET"},
 		function: lookup_handler,
 	},
-	"/redirect/" : {
+	{
+		name: "/redirect/",
 		params: 2,
 		methods: []string{"GET"},
 		function: redirect_handler,
 	},
-	"/delete/" : {
+	{
+		name: "/delete/",
 		params: 2,
 		methods: []string{"POST", "PUT"},
 		function: delete_handler,
 	},
-	"/bulk_delete/" : {
+	{
+		name: "/bulk_delete/",
 		params: 1,
 		methods: []string{"POST", "PUT"},
 		function: bulk_delete_handler,
 	},
-	"/ping/" : {
+	{
+		name: "/ping/",
 		params: 0,
 		methods: []string{"GET"},
 		function: stat_handler,
 	},
-	"/stat/" : {
+	{
+		name: "/stat/",
 		params: 0,
 		methods: []string{"GET"},
 		function: stat_handler,
 	},
-	"/" : {
+	{
+		name: "/",
 		params: 1,
 		methods: []string{"GET"},
 		function: common_handler,
@@ -503,8 +514,8 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 		path = req.URL.Path
 		reply.err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, fmt.Sprintf("could not unescape URL: %v", err))
 	} else {
-		for k, v := range proxy_handlers {
-			if (strings.HasPrefix(path, k)) {
+		for _, v := range proxy_handlers {
+			if (strings.HasPrefix(path, v.name)) {
 				method_matched := false
 				for _, method := range v.methods {
 					if method == req.Method {
@@ -514,7 +525,7 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 				}
 
 				if method_matched {
-					prefix := path[len(k):]
+					prefix := path[len(v.name):]
 					tmp := strings.SplitN(prefix, "/", v.params)
 
 					if len(tmp) >= v.params {
