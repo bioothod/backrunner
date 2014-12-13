@@ -162,8 +162,6 @@ func (bctl *BucketCtl) BucketStatUpdate() (err error) {
 }
 
 func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket) {
-	return bctl.Bucket[rand.Intn(len(bctl.Bucket))]
-
 	s, err := bctl.e.MetadataSession()
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
@@ -365,8 +363,6 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 	start := time.Now()
 
 	reply, err = bucket.lookup_serialize(true, s.WriteData(key, req.Body, offset, total_size))
-
-	return
 
 	// PID controller should aim at some destination performance point
 	// it can be velocity pf the vehicle or deisred write rate
