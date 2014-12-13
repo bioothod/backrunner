@@ -15,6 +15,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"path"
 	"runtime"
 	"strconv"
 	"strings"
@@ -315,7 +316,6 @@ func bulk_delete_handler(w http.ResponseWriter, req *http.Request, strings ...st
 	}
 
 	reply, err := proxy.bctl.BulkDelete(bucket, keys, req)
-	log.Printf("reply: %v, err: %v\n", reply, err)
 	if err != nil {
 		return Reply {
 			err: err,
@@ -339,15 +339,41 @@ func bulk_delete_handler(w http.ResponseWriter, req *http.Request, strings ...st
 }
 
 func common_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
-	key := "/mnt/elliptics/etc/crossdomain.xml"
-
-	data, err := ioutil.ReadFile(key)
-	if err != nil {
-		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
-			fmt.Sprintf("crossdomain: could not read file '%s': %q", key, err))
+	if len(proxy.bctl.Conf.Proxy.Root) == 0 {
+		err := errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
+			fmt.Sprintf("common: root options is not configured, reading files is being denied"))
 		return Reply {
 			err: err,
 			status: http.StatusServiceUnavailable,
+		}
+	}
+
+	if len(strings) == 0 {
+		w.WriteHeader(http.StatusOK)
+		return GoodReply()
+	}
+
+	object := path.Clean(strings[0])
+	if object == bucket.ProfilePath || object == "." {
+		err := errors.NewKeyError(req.URL.String(), http.StatusNotFound,
+			fmt.Sprintf("common: could not read file '%s'", object))
+		return Reply {
+			err: err,
+			status: http.StatusNotFound,
+		}
+	}
+
+	key := proxy.bctl.Conf.Proxy.Root + "/" + object
+
+	data, err := ioutil.ReadFile(key)
+	if err != nil {
+		log.Printf("common: url: %s, object: '%s', error: %s\n", req.URL.String(), object, err)
+
+		err = errors.NewKeyError(req.URL.String(), http.StatusNotFound,
+			fmt.Sprintf("common: could not read file '%s'", object))
+		return Reply {
+			err: err,
+			status: http.StatusNotFound,
 		}
 	}
 
@@ -434,8 +460,8 @@ var proxy_handlers = map[string]handler {
 		methods: []string{"GET"},
 		function: stat_handler,
 	},
-	"/crossdomain.xml" : {
-		params: 0,
+	"/" : {
+		params: 1,
 		methods: []string{"GET"},
 		function: common_handler,
 	},

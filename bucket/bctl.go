@@ -24,6 +24,8 @@ import (
 )
 
 const (
+	ProfilePath string = "backrunner.profile"
+
 	// time to write 1 byte into error bucket in seconds
 	// this is randomly selected error gain for buckets where upload has failed
 	BucketWriteErrorPain float64	= 10000000000.0
@@ -829,15 +831,17 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 
 	go func() {
 		for {
-			file, err := os.OpenFile("/mnt/elliptics/log/backrunner.profile", os.O_RDWR | os.O_APPEND | os.O_CREATE, 0644)
-			if err != nil {
-				return
+			if len(bctl.Conf.Proxy.Root) != 0 {
+				file, err := os.OpenFile(bctl.Conf.Proxy.Root + "/" + ProfilePath, os.O_RDWR | os.O_TRUNC | os.O_CREATE, 0644)
+				if err != nil {
+					return
+				}
+
+				fmt.Fprintf(file, "profile dump: %s\n", time.Now().String())
+				pprof.Lookup("block").WriteTo(file, 2)
+
+				file.Close()
 			}
-
-			fmt.Fprintf(file, "profile dump: %s\n", time.Now().String())
-			pprof.Lookup("block").WriteTo(file, 2)
-
-			file.Close()
 
 			time.Sleep(30 * time.Second)
 		}

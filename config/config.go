@@ -156,6 +156,13 @@ type ProxyClientConfig struct {
 
 	// maximum number of backends being defragmented on any single server node
 	DefragMaxBackendsPerServer int		`json:"defrag-max-backends-per-server"`
+
+	// all URL path strings which do not match registered handlers are being read
+	// as static objects living in @Root directory
+	// for example requesting http://example.com/crossdomain.xml URL
+	// will return @Root/crossdomain.xml file
+	// directory listing is not supported
+	Root string				`json:"root"`
 }
 
 type ProxyConfig struct {

@@ -186,6 +186,29 @@ func (t *BackrunnerTest) NewCheckRequest(method, handler, user, token string, st
 	return ret
 }
 
+func test_common_read(t *BackrunnerTest) error {
+	req := t.NewEmptyRequest("GET", "", "", "", "", "server.log")
+
+	resp, err := t.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("common: url: %s: could not send get request: %v", req.URL.String(), err)
+	}
+	defer resp.Body.Close()
+
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("common: url: %s: could not read reply: %v", req.URL.String(), req.Header, err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("check-content: url: %s, returned status: %d, must be: %d, data: %s",
+			req.URL.String(), resp.StatusCode, http.StatusOK, string(data))
+	}
+
+	return nil
+}
+
+
 func (t *BackrunnerTest) ACLInit() error {
 	user := strconv.FormatInt(rand.Int63(), 16)
 
@@ -1085,6 +1108,7 @@ func test_backend_slowdown(t *BackrunnerTest) error {
 
 var tests = [](func(t *BackrunnerTest) error) {
 	TestBackendStatusUpdate,
+	test_common_read,
 	test_bucket_file_update,
 	test_backend_slowdown,
 	test_nobucket_upload,
@@ -1175,6 +1199,7 @@ func Start(base, proxy_path string) {
 			DefragRemovedSpaceLimit: 0.1,
 			DefragMaxBuckets: 2,
 			DefragMaxBackendsPerServer: 2,
+			Root: bt.base,
 		},
 	}
 

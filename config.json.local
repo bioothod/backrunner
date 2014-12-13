@@ -24,6 +24,11 @@
 		"headers": {
 			"X-Ell-Some-Header": "this is a header data",
 			"XXXXXXX": "YYYYYY"
-		}
+		},
+		"defrag-free-space-limit": 0.4,
+		"defrag-removed-space-limit": 0.1,
+		"defrag-max-buckets": 3,
+		"defrag-max-backends-per-server": 2,
+		"root": "/opt/disk/elliptics/root"
 	}
 }
