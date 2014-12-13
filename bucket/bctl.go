@@ -821,7 +821,7 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 		BackBucket:		make([]*Bucket, 0, 10),
 
 		BucketTimer:		time.NewTimer(time.Second * 30),
-		BucketStatTimer:	time.NewTimer(time.Second * 2),
+		BucketStatTimer:	time.NewTimer(time.Second * 20),
 
 		DefragTime:		time.Now(),
 	}
