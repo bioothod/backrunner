@@ -74,6 +74,8 @@ func (bctl *BucketCtl) DefragBuckets(defrag_buckets []bstat) {
 }
 
 func (bctl *BucketCtl) ScanBuckets() {
+	return
+
 	if time.Since(bctl.DefragTime).Seconds() <= 30 {
 		return
 	}
