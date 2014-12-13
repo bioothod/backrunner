@@ -44,6 +44,9 @@ type BackrunnerTest struct {
 	server_cmd *exec.Cmd
 	proxy_cmd *exec.Cmd
 
+	proxy_stdout bytes.Buffer
+	proxy_stderr bytes.Buffer
+
 	elliptics_address []string
 
 	client *http.Client
@@ -1168,13 +1171,15 @@ func Start(base, proxy_path string) {
 
 	defer func() {
 		bt.server_cmd.Process.Signal(os.Interrupt)
-		bt.proxy_cmd.Process.Signal(os.Interrupt)
 
 		err := bt.server_cmd.Wait()
 		log.Printf("dnet_ioserv process exited: %v", err)
 
+		bt.proxy_cmd.Process.Signal(os.Interrupt)
 		err = bt.proxy_cmd.Wait()
 		log.Printf("proxy process exited: %v", err)
+		log.Printf("proxy stdout: %v", bt.proxy_stdout.String())
+		log.Printf("proxy stderr: %v", bt.proxy_stderr.String())
 	}()
 
 	bt.StartEllipticsServer()

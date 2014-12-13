@@ -173,6 +173,9 @@ func (bt *BackrunnerTest) StartEllipticsClientProxy(proxy_path string) {
 	}
 
 	cmd := exec.Command(proxy_path, "-config", file, "-buckets", bt.bucket_file)
+	cmd.Stdout = &bt.proxy_stdout
+	cmd.Stderr = &bt.proxy_stderr
+
 	err = cmd.Start()
 	if err != nil {
 		log.Fatalf("Could not start proxy process: %v\n", err)
