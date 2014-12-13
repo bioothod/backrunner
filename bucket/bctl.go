@@ -129,19 +129,10 @@ func (bctl *BucketCtl) FindBucket(name string) (bucket *Bucket, err error) {
 	return bucket, nil
 }
 
-func (bctl *BucketCtl) BucketStatUpdate() (err error) {
-	stat, err := bctl.e.Stat()
-	if err != nil {
-		return err
-	}
-
-	bctl.Lock()
-
+func (bctl *BucketCtl) BucketStatUpdateNolock(stat *elliptics.DnetStat) (err error) {
 	bctl.StatTime = stat.Time
 
-	buckets := 0
 	for _, b := range bctl.AllBuckets() {
-		buckets++
 		b.Group = make(map[uint32]*elliptics.StatGroup)
 
 		for _, group := range b.Meta.Groups {
@@ -152,12 +143,23 @@ func (bctl *BucketCtl) BucketStatUpdate() (err error) {
 		}
 	}
 
+	return
+}
+
+func (bctl *BucketCtl) BucketStatUpdate() (err error) {
+	stat, err := bctl.e.Stat()
+	if err != nil {
+		return err
+	}
+
+	bctl.Lock()
+	err = bctl.BucketStatUpdateNolock(stat)
 	bctl.Unlock()
 
 	// run defragmentation scan
 	bctl.ScanBuckets()
 
-	return
+	return err
 }
 
 func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket) {
@@ -788,6 +790,11 @@ func (bctl *BucketCtl) ReadAllBucketsMeta() (err error) {
 		log.Printf("read-all-buckets-meta: could not read back buckets: %v\n", err)
 	}
 
+	stat, err := bctl.e.Stat()
+	if err != nil {
+		return err
+	}
+
 	bctl.Lock()
 	if new_buckets != nil {
 		bctl.Bucket = new_buckets
@@ -796,11 +803,11 @@ func (bctl *BucketCtl) ReadAllBucketsMeta() (err error) {
 	if new_back_buckets != nil {
 		bctl.BackBucket = new_back_buckets
 	}
+
+	err = bctl.BucketStatUpdateNolock(stat)
 	bctl.Unlock()
 
-	bctl.BucketStatUpdate()
-
-	return nil
+	return err
 }
 
 func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path string) (bctl *BucketCtl, err error) {
