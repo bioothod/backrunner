@@ -120,10 +120,9 @@ func (bctl *BucketCtl) FindBucket(name string) (bucket *Bucket, err error) {
 		}
 
 		bctl.Lock()
-		defer bctl.Unlock()
-
 		bctl.BackBucket = append(bctl.BackBucket, b)
 		bucket = b
+		bctl.Unlock()
 	}
 
 	return bucket, nil
