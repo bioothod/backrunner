@@ -238,10 +238,10 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 				bs.Pain += free_space_pain
 			}
 
-			bs.Pain += st.PID.Pain
+			bs.Pain += st.PIDPain()
 
 			log.Printf("find-bucket: url: %s, bucket: %s, group: %d: content-length: %d, free-space-rate: %f, backend-pain: %f, pain: %f\n",
-				req.URL.String(), b.Name, group_id, req.ContentLength, free_space_rate, st.PID.Pain, bs.Pain)
+				req.URL.String(), b.Name, group_id, req.ContentLength, free_space_rate, st.PIDPain(), bs.Pain)
 		}
 
 		total_groups := len(bs.SuccessGroups) + len(bs.ErrorGroups)
@@ -373,14 +373,14 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 	time_us := time.Since(start).Nanoseconds() / 1000
 	e := float64(time_us) / float64(total_size)
 
-	bctl.Lock()
+	bctl.RLock()
 
 	for _, res := range reply.Servers {
 		sg, ok := bucket.Group[res.Group]
 		if ok {
 			st, back_err := sg.FindStatBackend(res.Server, res.Backend)
 			if back_err == nil {
-				old_pain := st.PID.Pain
+				old_pain := st.PIDPain()
 				update_pain := e
 				estring := "ok"
 
@@ -391,7 +391,7 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 				st.PIDUpdate(update_pain)
 
 				log.Printf("bucket-upload: bucket: %s, key: %s, size: %d, time: %d us, group: %d, e: %f, error: %v, pain: %f -> %f\n",
-					bucket.Name, key, total_size, time_us, res.Group, e, estring, old_pain, st.PID.Pain)
+					bucket.Name, key, total_size, time_us, res.Group, e, estring, old_pain, st.PIDPain())
 			}
 		}
 	}
@@ -402,16 +402,16 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 			if ok {
 				st, back_err := sg.FindStatBackendKey(s, key, group_id)
 				if back_err == nil {
-					old_pain := st.PID.Pain
+					old_pain := st.PIDPain()
 
 					log.Printf("bucket-upload: bucket: %s, key: %s, size: %d, time: %d us, error group: %d, e: %f, pain: %f -> %f\n",
-						bucket.Name, key, total_size, time_us, group_id, e, old_pain, st.PID.Pain)
+						bucket.Name, key, total_size, time_us, group_id, e, old_pain, st.PIDPain())
 				}
 			}
 		}
 	}
 
-	bctl.Unlock()
+	bctl.RUnlock()
 
 	return
 }
