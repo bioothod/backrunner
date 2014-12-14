@@ -157,7 +157,7 @@ func (bctl *BucketCtl) ScanBuckets() {
 
 	bctl.RUnlock()
 
-	//bctl.DefragBuckets(defrag_buckets)
+	bctl.DefragBuckets(defrag_buckets)
 
 	return
 }
