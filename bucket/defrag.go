@@ -117,8 +117,13 @@ func (bctl *BucketCtl) ScanBuckets() {
 			continue
 		}
 
-		for _, stat_group := range b.Group {
+		for group_id, stat_group := range b.Group {
 			for ab, st := range stat_group.Ab {
+				if st.Error.Code != 0 {
+					// do not start defragmentation in failed backends
+					continue
+				}
+
 				if st.RO {
 					log.Printf("defrag: bucket: %s, %s: backend is in read-only mode\n",
 						b.Name, ab.String())
@@ -148,7 +153,7 @@ func (bctl *BucketCtl) ScanBuckets() {
 				}
 
 				log.Printf("defrag: added bucket: %s, %s, group: %d, free-space-rate: %f, removed-space-rate: %f, used: %d, total: %d\n",
-					b.Name, ab.String(), stat_group, free_space_rate, removed_space_rate,
+					b.Name, ab.String(), group_id, free_space_rate, removed_space_rate,
 					st.VFS.BackendUsedSize, st.VFS.TotalSizeLimit)
 
 				defrag_buckets = append(defrag_buckets, bs)
