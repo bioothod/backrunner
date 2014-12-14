@@ -211,6 +211,62 @@ func test_common_read(t *BackrunnerTest) error {
 	return nil
 }
 
+func test_backends_status(t *BackrunnerTest) error {
+	s, err := elliptics.NewSession(t.ell.Node)
+	if err != nil {
+		return fmt.Errorf("could not create elliptics session: %v", err)
+	}
+
+	addr, err := elliptics.NewDnetAddrStr(t.elliptics_address[0])
+	if err != nil {
+		return fmt.Errorf("could not create address from '%s': %v", t.elliptics_address[0], err)
+	}
+
+	for i := 0; i < 10; i++ {
+		var st *elliptics.DnetBackendsStatus = nil
+
+		for st = range s.BackendsStatus(&addr) {
+		}
+
+		if st.Error != nil {
+			return st.Error
+		}
+
+		for _, back := range st.Backends {
+			if back.State != elliptics.BackendStateEnabled {
+				return fmt.Errorf("addr: %s, backend: %d, state: %d: state must be %d",
+					addr.String(), back.Backend, back.State, elliptics.BackendStateEnabled)
+			}
+		}
+
+		var backend_id int32 = 1
+		for _ = range s.BackendDisable(&addr, backend_id) {}
+		for st = range s.BackendsStatus(&addr) {}
+		if st.Error != nil {
+			return st.Error
+		}
+
+		for _, back := range st.Backends {
+			if back.Backend == backend_id {
+				if back.State == elliptics.BackendStateEnabled {
+					return fmt.Errorf("addr: %s, backend: %d, state: %d: state must be not %d",
+						addr.String(), back.Backend, back.State, elliptics.BackendStateEnabled)
+				}
+
+				continue
+			}
+
+			if back.State != elliptics.BackendStateEnabled {
+				return fmt.Errorf("addr: %s, backend: %d, state: %d: state must be 0",
+					addr.String(), back.Backend, back.State, elliptics.BackendStateEnabled)
+			}
+		}
+
+		for _ = range s.BackendEnable(&addr, 1) {}
+	}
+
+	return nil
+}
 
 func (t *BackrunnerTest) ACLInit() error {
 	user := strconv.FormatInt(rand.Int63(), 16)
@@ -1111,6 +1167,7 @@ func test_backend_slowdown(t *BackrunnerTest) error {
 
 var tests = [](func(t *BackrunnerTest) error) {
 	TestBackendStatusUpdate,
+	test_backends_status,
 	test_common_read,
 	test_bucket_file_update,
 	test_backend_slowdown,
