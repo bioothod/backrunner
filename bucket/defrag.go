@@ -147,8 +147,9 @@ func (bctl *BucketCtl) ScanBuckets() {
 					removed_space_rate:	removed_space_rate,
 				}
 
-				log.Printf("defrag: added bucket: %s, %s, free-space-rate: %f, removed-space-rate: %f\n",
-					b.Name, ab.String(), free_space_rate, removed_space_rate)
+				log.Printf("defrag: added bucket: %s, %s, free-space-rate: %f, removed-space-rate: %f, used: %d, total: %d\n",
+					b.Name, ab.String(), free_space_rate, removed_space_rate,
+					st.VFS.BackendUsedSize, st.VFS.TotalSizeLimit)
 
 				defrag_buckets = append(defrag_buckets, bs)
 			}
