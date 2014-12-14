@@ -240,8 +240,8 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 
 			bs.Pain += st.PIDPain()
 
-			log.Printf("find-bucket: url: %s, bucket: %s, group: %d: content-length: %d, free-space-rate: %f, backend-pain: %f, pain: %f\n",
-				req.URL.String(), b.Name, group_id, req.ContentLength, free_space_rate, st.PIDPain(), bs.Pain)
+			log.Printf("find-bucket: url: %s, bucket: %s, group: %d: content-length: %d, free-space-rate: %f, backend-pain: %f, pain: %f, dstat: %f\n",
+				req.URL.String(), b.Name, group_id, req.ContentLength, free_space_rate, st.PIDPain(), bs.Pain, st.DStat.Util)
 		}
 
 		total_groups := len(bs.SuccessGroups) + len(bs.ErrorGroups)
