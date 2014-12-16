@@ -378,7 +378,7 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 	for _, res := range reply.Servers {
 		sg, ok := bucket.Group[res.Group]
 		if ok {
-			st, back_err := sg.FindStatBackend(res.Server, res.Backend)
+			st, back_err := sg.FindStatBackend(res.Addr, res.Backend)
 			if back_err == nil {
 				old_pain := st.PIDPain()
 				update_pain := e

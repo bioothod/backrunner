@@ -264,6 +264,7 @@ func (bucket *Bucket) lookup_serialize(write bool, ch <-chan elliptics.Lookuper)
 		ret := &reply.LookupServerResult {
 			Group: l.Cmd().ID.Group,
 			Backend: l.Cmd().Backend,
+			Addr: l.Addr(),
 		}
 		if l.Error() != nil {
 			r.ErrorGroups = append(r.ErrorGroups, l.Cmd().ID.Group)

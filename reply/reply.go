@@ -3,6 +3,7 @@ package reply
 import "github.com/bioothod/elliptics-go/elliptics"
 
 type LookupServerResult struct {
+	Addr		*elliptics.DnetAddr	`json:"-"` // address this reply has been received
 	Group		uint32			`json:"group"`
 	Backend		int32			`json:"backend"`
 	IDString	string			`json:"id"`
@@ -14,7 +15,7 @@ type LookupServerResult struct {
 	ServerString	string			`json:"server"`
 	Error		*elliptics.DnetError	`json:"error"`
 
-	Server		*elliptics.DnetAddr	`json:"-"`
+	Server		*elliptics.DnetAddr	`json:"-"` // server encoded in reply, can differ from @Addr because of forwarding
 	Info		*elliptics.DnetFileInfo	`json:"-"`
 }
 
