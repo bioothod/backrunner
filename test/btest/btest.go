@@ -455,42 +455,44 @@ func (t *BackrunnerTest) check_key_content(bucket, key, user, token string, offs
 }
 
 func test_big_bucket_upload(t *BackrunnerTest) error {
-	bucket := t.io_buckets[rand.Intn(len(t.io_buckets))]
-	key := strconv.FormatInt(rand.Int63(), 16)
+	for i := 0; i < 10; i++ {
+		bucket := t.io_buckets[rand.Intn(len(t.io_buckets))]
+		key := strconv.FormatInt(rand.Int63(), 16)
 
-	// [20, 20+25) megabytes
-	total_size := 1024 * (rand.Int31n(25 * 1024) + 20 * 1024)
-	buf := make([]byte, total_size)
-	_, err := cryptorand.Read(buf)
-	if err != nil {
-		return fmt.Errorf("big-bucket-upload: could not read random data: %v", err)
-	}
+		// [20, 20+25) megabytes
+		total_size := 1024 * (rand.Int31n(25 * 1024) + 20 * 1024)
+		buf := make([]byte, total_size)
+		_, err := cryptorand.Read(buf)
+		if err != nil {
+			return fmt.Errorf("big-bucket-upload: could not read random data: %v", err)
+		}
 
-	body := bytes.NewReader(buf)
-	req := t.NewRequest("POST", "upload", t.all_allowed_user, t.all_allowed_token, bucket, key, 0, 0, body)
+		body := bytes.NewReader(buf)
+		req := t.NewRequest("POST", "upload", t.all_allowed_user, t.all_allowed_token, bucket, key, 0, 0, body)
 
-	resp, err := t.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("big-bucket-upload: could not send upload request: %v", err)
-	}
-	defer resp.Body.Close()
+		resp, err := t.client.Do(req)
+		if err != nil {
+			return fmt.Errorf("big-bucket-upload: could not send upload request: %v", err)
+		}
+		defer resp.Body.Close()
 
-	_, err = t.check_upload_reply(bucket, key, resp)
-	if err != nil {
-		return fmt.Errorf("big-bucket-upload: %v", err)
-	}
+		_, err = t.check_upload_reply(bucket, key, resp)
+		if err != nil {
+			return fmt.Errorf("big-bucket-upload: %v", err)
+		}
 
-	err = t.check_key_content(bucket, key, t.all_allowed_user, t.all_allowed_token, 0, uint64(total_size), buf)
-	if err != nil {
-		return fmt.Errorf("big-bucket-upload: full size: %d: %v", total_size, err)
-	}
+		err = t.check_key_content(bucket, key, t.all_allowed_user, t.all_allowed_token, 0, uint64(total_size), buf)
+		if err != nil {
+			return fmt.Errorf("big-bucket-upload: full size: %d: %v", total_size, err)
+		}
 
-	offset := total_size / 2
-	size := total_size / 4
-	err = t.check_key_content(bucket, key, t.all_allowed_user, t.all_allowed_token,
-		uint64(offset), uint64(size), buf[offset: offset + size])
-	if err != nil {
-		return fmt.Errorf("big-bucket-upload: offset: %d, size: %d, %v", offset, size, err)
+		offset := total_size / 2
+		size := total_size / 4
+		err = t.check_key_content(bucket, key, t.all_allowed_user, t.all_allowed_token,
+			uint64(offset), uint64(size), buf[offset: offset + size])
+		if err != nil {
+			return fmt.Errorf("big-bucket-upload: offset: %d, size: %d, %v", offset, size, err)
+		}
 	}
 
 	return nil
