@@ -280,6 +280,28 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 		return nil
 	}
 
+	// get rid of buckets without free space if we do have other buckets
+	ok_buckets := 0
+	nospace_buckets := 0
+	for _, bs := range stat {
+		if bs.Pain < PainNoFreeSpaceSoft {
+			ok_buckets++
+		} else {
+			nospace_buckets++
+		}
+	}
+
+	if nospace_buckets != 0 && ok_buckets != 0 {
+		tmp := make([]*bucket_stat, 0)
+		for _, bs := range stat {
+			if bs.Pain < PainNoFreeSpaceSoft {
+				tmp = append(tmp, bs)
+			}
+		}
+
+		stat = tmp
+	}
+
 	var sum int64 = 0
 	for {
 		sum = 0
