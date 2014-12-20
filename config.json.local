@@ -5,7 +5,7 @@
 		"log-prefix": "backrunner: ",
 		"remote": [
 			"qweqwe:1024:2",
-			"qweqwe:1025:2",
+			"localhost:1025:2",
 			"localhost:1026:2"
 		],
 		"metadata-groups": [1,2]
