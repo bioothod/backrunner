@@ -59,14 +59,14 @@ func (e *Elliptics) DataSession(req *http.Request) (s *elliptics.Session, err er
 	if ok {
 		val, err = strconv.ParseUint(ioflags[0], 0, 32)
 		if err == nil {
-			s.SetIOflags(uint32(val))
+			s.SetIOflags(elliptics.IOflag(val))
 		}
 	}
 	cflags, ok := values["cflags"]
 	if ok {
 		val, err = strconv.ParseUint(cflags[0], 0, 64)
 		if err == nil {
-			s.SetCflags(val)
+			s.SetCflags(elliptics.Cflag(val))
 		}
 	}
 	trace, ok = values["trace_id"]
@@ -77,7 +77,7 @@ func (e *Elliptics) DataSession(req *http.Request) (s *elliptics.Session, err er
 		}
 	}
 
-	s.SetTraceID(trace_id)
+	s.SetTraceID(elliptics.TraceID(trace_id))
 
 	return
 }
