@@ -226,7 +226,8 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 			} else if free_space_rate <= bctl.Conf.Proxy.FreeSpaceRatioSoft {
 				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
 
-				bs.Pain += PainNoFreeSpaceSoft
+				free_space_pain := 1.0 / (free_space_rate - bctl.Conf.Proxy.FreeSpaceRatioHard)
+				bs.Pain += PainNoFreeSpaceSoft + free_space_pain * 5
 			} else {
 				bs.SuccessGroups = append(bs.SuccessGroups, group_id)
 
