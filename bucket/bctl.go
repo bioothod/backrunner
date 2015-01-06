@@ -161,6 +161,19 @@ func (bctl *BucketCtl) BucketStatUpdate() (err error) {
 	return err
 }
 
+func FreeSpaceRatio(st *elliptics.StatBackend, content_length uint64) float64 {
+	free_space_rate := 1.0 - float64(st.VFS.BackendUsedSize + content_length) / float64(st.VFS.TotalSizeLimit)
+	if st.VFS.Avail <= st.VFS.TotalSizeLimit {
+		if st.VFS.Avail < content_length {
+			free_space_rate = 0
+		} else {
+			free_space_rate = float64(st.VFS.Avail - content_length) / float64(st.VFS.TotalSizeLimit)
+		}
+	}
+
+	return free_space_rate
+}
+
 func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket) {
 	s, err := bctl.e.MetadataSession()
 	if err != nil {
@@ -218,7 +231,7 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 				continue
 			}
 
-			free_space_rate := 1.0 - float64(st.VFS.BackendUsedSize + uint64(req.ContentLength)) / float64(st.VFS.TotalSizeLimit)
+			free_space_rate := FreeSpaceRatio(st, uint64(req.ContentLength))
 			if free_space_rate <= bctl.Conf.Proxy.FreeSpaceRatioHard {
 				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
 

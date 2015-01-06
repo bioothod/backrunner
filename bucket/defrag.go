@@ -130,7 +130,7 @@ func (bctl *BucketCtl) ScanBuckets() {
 					continue
 				}
 
-				free_space_rate := 1.0 - float64(st.VFS.BackendUsedSize) / float64(st.VFS.TotalSizeLimit)
+				free_space_rate := FreeSpaceRatio(st, 0)
 				if free_space_rate > bctl.Conf.Proxy.DefragFreeSpaceLimit {
 					log.Printf("defrag: bucket: %s, %s, free-space-rate: %f, must be < %f\n",
 						b.Name, ab.String(), free_space_rate, bctl.Conf.Proxy.DefragFreeSpaceLimit)
