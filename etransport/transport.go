@@ -119,7 +119,7 @@ func NewEllipticsTransport(conf *config.ProxyConfig) (e *Elliptics, err error) {
 	log.SetOutput(e.LogFile)
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
-	e.Node, err = elliptics.NewNode(e.Log, conf.Elliptics.LogLevel)
+	e.Node, err = elliptics.NewNode(conf.Elliptics.LogFile, conf.Elliptics.LogLevel)
 	if err != nil {
 		log.Fatal(err)
 	}
