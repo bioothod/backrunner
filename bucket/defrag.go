@@ -145,6 +145,12 @@ func (bctl *BucketCtl) ScanBuckets() {
 					continue
 				}
 
+				if free_space_rate > 1 || removed_space_rate > 1 {
+					log.Printf("defrag: bucket: %s, %s, free-space-rate: %f, removed-space-rate: %f, invalid stats\n",
+						b.Name, ab.String(), free_space_rate, removed_space_rate)
+					continue
+				}
+
 				bs := bstat {
 					bucket:			b,
 					ab:			ab,
