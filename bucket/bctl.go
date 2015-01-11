@@ -132,13 +132,13 @@ func (bctl *BucketCtl) BucketStatUpdateNolock(stat *elliptics.DnetStat) (err err
 	bctl.StatTime = stat.Time
 
 	for _, b := range bctl.AllBuckets() {
-		for gid, group := range b.Meta.Groups {
+		for _, group := range b.Meta.Groups {
 			sg, ok := stat.Group[group]
 			if ok {
 				b.Group[group] = sg
 			} else {
-				log.Printf("bucket-stat-update: bucket: %s, group: %d: there is no bucket stat, using old values",
-					b.Name, gid)
+				log.Printf("bucket-stat-update: bucket: %s, group: %d: there is no bucket stat, using old values (if any)",
+					b.Name, group)
 			}
 		}
 	}
