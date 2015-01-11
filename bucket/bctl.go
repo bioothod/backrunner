@@ -189,6 +189,9 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 		ErrorGroups	[]uint32
 		Pain		float64
 		Range		float64
+
+		pains		[]float64
+		free_rates	[]float64
 	}
 
 	stat := make([]*bucket_stat, 0)
@@ -202,6 +205,10 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 			ErrorGroups:	make([]uint32, 0),
 			Pain:		0.0,
 			Range:		0.0,
+
+			pains:		make([]float64, 0, len(b.Group)),
+			free_rates:	make([]float64, 0, len(b.Group)),
+
 		}
 
 		for group_id, sg := range b.Group {
@@ -255,8 +262,8 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 
 			bs.Pain += st.PIDPain()
 
-			log.Printf("find-bucket: url: %s, bucket: %s, group: %d: content-length: %d, free-space-rate: %f, backend-pain: %f, pain: %f, dstat: %f\n",
-				req.URL.String(), b.Name, group_id, req.ContentLength, free_space_rate, st.PIDPain(), bs.Pain, st.DStat.Util)
+			bs.pains = append(bs.pains, st.PIDPain())
+			bs.free_rates = append(bs.free_rates, free_space_rate)
 		}
 
 		total_groups := len(bs.SuccessGroups) + len(bs.ErrorGroups)
@@ -267,8 +274,9 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 
 		bs.Pain += float64(diff) * PainNoGroup
 
-		log.Printf("find-bucket: url: %s, bucket: %s, content-length: %d, groups: %v, success-groups: %v, error-groups: %v, pain: %f\n",
-			req.URL.String(), b.Name, req.ContentLength, b.Meta.Groups, bs.SuccessGroups, bs.ErrorGroups, bs.Pain)
+		log.Printf("find-bucket: url: %s, bucket: %s, content-length: %d, groups: %v, success-groups: %v, error-groups: %v, pain: %f, pains: %v, free_rates: %v\n",
+			req.URL.String(), b.Name, req.ContentLength, b.Meta.Groups, bs.SuccessGroups, bs.ErrorGroups, bs.Pain,
+			bs.pains, bs.free_rates)
 
 		// do not even consider buckets without free space even in one group
 		if bs.Pain >= PainNoFreeSpaceHard {
@@ -337,13 +345,11 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 
 	r := rand.Int63n(int64(sum))
 	for _, bs := range stat {
-		log.Printf("find-bucket: bucket: %s, pain: %f, range: %f, sum: %d, r: %d\n",
-			bs.Bucket.Name, bs.Pain, bs.Range, sum, r)
-
 		r -= int64(bs.Range)
 		if r <= 0 {
-			log.Printf("find-bucket: selected bucket: %s, groups: %v, pain: %f\n",
-				bs.Bucket.Name, bs.Bucket.Meta.Groups, bs.Pain)
+			log.Printf("find-bucket: url: %s, selected bucket: %s, content-length: %d, groups: %v, success-groups: %v, error-groups: %v, pain: %f, pains: %v, free_rates: %v\n",
+				req.URL.String(), bs.Bucket.Name, req.ContentLength, bs.Bucket.Meta.Groups, bs.SuccessGroups, bs.ErrorGroups, bs.Pain,
+				bs.pains, bs.free_rates)
 			return bs.Bucket
 		}
 	}
