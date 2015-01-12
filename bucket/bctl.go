@@ -239,6 +239,14 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 				continue
 			}
 
+			// this is an empty stat structure
+			if st.VFS.TotalSizeLimit == 0 || st.VFS.Total  == 0{
+				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
+
+				bs.Pain += PainNoStats
+				continue
+			}
+
 			free_space_rate := FreeSpaceRatio(st, uint64(req.ContentLength))
 			if free_space_rate <= bctl.Conf.Proxy.FreeSpaceRatioHard {
 				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
