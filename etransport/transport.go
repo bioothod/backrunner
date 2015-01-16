@@ -2,9 +2,8 @@ package etransport
 
 import (
 	"C"
-	"fmt"
-	"github.com/bioothod/elliptics-go/elliptics"
 	"github.com/bioothod/backrunner/config"
+	"github.com/bioothod/elliptics-go/elliptics"
 	"io"
 	"log"
 	"math/rand"
@@ -16,7 +15,6 @@ import (
 
 type Elliptics struct {
 	LogFile		io.Writer
-	Log		*log.Logger
 
 	Node		*elliptics.Node
 	MetadataGroups	[]uint32
@@ -59,14 +57,14 @@ func (e *Elliptics) DataSession(req *http.Request) (s *elliptics.Session, err er
 	if ok {
 		val, err = strconv.ParseUint(ioflags[0], 0, 32)
 		if err == nil {
-			s.SetIOflags(uint32(val))
+			s.SetIOflags(elliptics.IOflag(val))
 		}
 	}
 	cflags, ok := values["cflags"]
 	if ok {
 		val, err = strconv.ParseUint(cflags[0], 0, 64)
 		if err == nil {
-			s.SetCflags(val)
+			s.SetCflags(elliptics.Cflag(val))
 		}
 	}
 	trace, ok = values["trace_id"]
@@ -77,7 +75,7 @@ func (e *Elliptics) DataSession(req *http.Request) (s *elliptics.Session, err er
 		}
 	}
 
-	s.SetTraceID(trace_id)
+	s.SetTraceID(elliptics.TraceID(trace_id))
 
 	return
 }
@@ -114,12 +112,11 @@ func NewEllipticsTransport(conf *config.ProxyConfig) (e *Elliptics, err error) {
 		log.Fatalf("Could not open log file '%s': %q", conf.Elliptics.LogFile, err)
 	}
 
-	e.Log = log.New(e.LogFile, fmt.Sprintf("elliptics: %s", conf.Elliptics.LogPrefix), log.LstdFlags | log.Lmicroseconds)
 	log.SetPrefix(conf.Elliptics.LogPrefix)
 	log.SetOutput(e.LogFile)
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
-	e.Node, err = elliptics.NewNode(e.Log, conf.Elliptics.LogLevel)
+	e.Node, err = elliptics.NewNode(conf.Elliptics.LogFile, conf.Elliptics.LogLevel)
 	if err != nil {
 		log.Fatal(err)
 	}
