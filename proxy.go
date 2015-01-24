@@ -33,6 +33,7 @@ type bproxy struct {
 
 type Reply struct {
 	status		int
+	length		uint64
 	err		error
 }
 
@@ -40,6 +41,14 @@ func GoodReply() Reply {
 	return Reply {
 		err: nil,
 		status: http.StatusOK,
+	}
+}
+
+func GoodReplyLength(length uint64) Reply {
+	return Reply {
+		err: nil,
+		status: http.StatusOK,
+		length: length,
 	}
 }
 
@@ -380,7 +389,7 @@ func common_handler(w http.ResponseWriter, req *http.Request, strings ...string)
 	w.WriteHeader(http.StatusOK)
 	w.Write(data)
 
-	return GoodReply()
+	return GoodReplyLength(uint64(len(data)))
 }
 
 func stat_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
@@ -408,73 +417,69 @@ func stat_handler(w http.ResponseWriter, req *http.Request, strings ...string) R
 	return GoodReply()
 }
 
+func proxy_stat_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
+	w.WriteHeader(http.StatusOK)
+	//w.Write("")
+
+	return GoodReply()
+}
+
 type handler struct {
-	name			string		// handler's name
 	params			int		// minimal number of path components after /handler/ needed to run this handler
 	methods			[]string	// GET, POST and so on - methods which are allowed to be used with this handler
 	function		func(w http.ResponseWriter, req *http.Request, v...string) Reply
 }
 
-var proxy_handlers = []handler {
-	{
-		name: "/nobucket_upload/",
+var proxy_handlers = map[string]*handler {
+	"nobucket_upload": &handler{
 		params:	1,
 		methods: []string{"POST", "PUT"},
 		function: nobucket_upload_handler,
 	},
-	{
-		name: "/upload/",
+	"upload": &handler{
 		params: 2,
 		methods: []string{"POST", "PUT"},
 		function: bucket_upload_handler,
 	},
-	{
-		name: "/get/",
+	"get": &handler{
 		params: 2,
 		methods: []string{"GET"},
 		function: get_handler,
 	},
-	{
-		name: "/lookup/",
+	"lookup": &handler{
 		params: 2,
 		methods: []string{"GET"},
 		function: lookup_handler,
 	},
-	{
-		name: "/redirect/",
+	"redirect": &handler{
 		params: 2,
 		methods: []string{"GET"},
 		function: redirect_handler,
 	},
-	{
-		name: "/delete/",
+	"delete": &handler{
 		params: 2,
 		methods: []string{"POST", "PUT"},
 		function: delete_handler,
 	},
-	{
-		name: "/bulk_delete/",
+	"bulk_delete": &handler{
 		params: 1,
 		methods: []string{"POST", "PUT"},
 		function: bulk_delete_handler,
 	},
-	{
-		name: "/ping/",
+	"ping": &handler{
 		params: 0,
 		methods: []string{"GET"},
 		function: stat_handler,
 	},
-	{
-		name: "/stat/",
+	"stat": &handler{
 		params: 0,
 		methods: []string{"GET"},
 		function: stat_handler,
 	},
-	{
-		name: "/",
-		params: 1,
+	"proxy_stat": &handler{
+		params: 0,
 		methods: []string{"GET"},
-		function: common_handler,
+		function: proxy_stat_handler,
 	},
 }
 
@@ -520,10 +525,15 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 		path = req.URL.Path
 		reply.err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, fmt.Sprintf("could not unescape URL: %v", err))
 	} else {
-		for _, v := range proxy_handlers {
-			if (strings.HasPrefix(path, v.name)) {
+		hstrings := strings.SplitN(path, "/", 3)
+		if len(hstrings) < 2 {
+			path = req.URL.Path
+			reply.err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, fmt.Sprintf("could not split URL"))
+		} else {
+			h, ok := proxy_handlers[hstrings[1]]
+			if ok {
 				method_matched := false
-				for _, method := range v.methods {
+				for _, method := range h.methods {
 					if method == req.Method {
 						method_matched = true
 						break
@@ -531,14 +541,22 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 				}
 
 				if method_matched {
-					prefix := path[len(v.name):]
-					tmp := strings.SplitN(prefix, "/", v.params)
-
-					if len(tmp) >= v.params {
-						reply = v.function(w, req, tmp...)
-						break
+					tmp := strings.SplitN(hstrings[2], "/", h.params)
+					if len(tmp) >= h.params {
+						reply = h.function(w, req, tmp...)
+					} else {
+						reply.err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
+							fmt.Sprintf("not enough path parameters for handler: %v, must be at least: %d",
+								len(tmp), h.params))
 					}
+				} else {
+					reply.err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
+						fmt.Sprintf("method doesn't match: provided: %s, required: %v",
+							req.Method, h.methods))
 				}
+			} else {
+				tmp := []string{path}
+				reply = common_handler(w, req, tmp...)
 			}
 		}
 	}
@@ -550,6 +568,9 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 
 	if content_length == 0 {
 		content_length = get_content_length(w.Header())
+		if content_length == 0 {
+			content_length = reply.length
+		}
 	}
 
 	log.Printf("access_log: method: '%s', path: '%s', encoded-uri: '%s', status: %d, size: %d, time: %.3f ms, err: '%v'\n",
