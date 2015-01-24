@@ -5,9 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"github.com/bioothod/backrunner/auth"
+	"github.com/bioothod/backrunner/bucket"
 	"github.com/bioothod/backrunner/config"
 	"github.com/bioothod/backrunner/errors"
-	"github.com/bioothod/backrunner/bucket"
+	"github.com/bioothod/backrunner/estimator"
 	"github.com/bioothod/backrunner/etransport"
 	"github.com/bioothod/backrunner/reply"
 	"io/ioutil"
@@ -417,9 +418,50 @@ func stat_handler(w http.ResponseWriter, req *http.Request, strings ...string) R
 	return GoodReply()
 }
 
+type Metric struct {
+	BPS		uint64			`json:"bps"`
+	RPS		map[string]uint64	`json:"rps"`
+}
+
+type proxy_stat_reply struct {
+	Handlers	map[string]Metric	`json:"handlers"`
+}
+
+// this uglymoron is needed to prevent Golang initialization loop logic from exploding
+var estimator_scan_handlers map[string]*handler
+
 func proxy_stat_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
+	res := proxy_stat_reply {
+		Handlers: make(map[string]Metric),
+	}
+
+	for name, h := range estimator_scan_handlers {
+		e := h.e.Read()
+
+		m := Metric {
+			BPS:		uint64(e.BPS),
+			RPS:		make(map[string]uint64),
+		}
+
+		for k, v := range e.RPS {
+			m.RPS[fmt.Sprintf("%d", k)] = uint64(v)
+		}
+
+		res.Handlers[name] = m
+	}
+
+	reply_json, err := json.Marshal(&res)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
+			fmt.Sprintf("stat: json marshal failed: %q", err))
+		return Reply {
+			err: err,
+			status: http.StatusServiceUnavailable,
+		}
+	}
+
 	w.WriteHeader(http.StatusOK)
-	//w.Write("")
+	w.Write(reply_json)
 
 	return GoodReply()
 }
@@ -428,6 +470,8 @@ type handler struct {
 	params			int		// minimal number of path components after /handler/ needed to run this handler
 	methods			[]string	// GET, POST and so on - methods which are allowed to be used with this handler
 	function		func(w http.ResponseWriter, req *http.Request, v...string) Reply
+
+	e			*estimator.Estimator
 }
 
 var proxy_handlers = map[string]*handler {
@@ -481,6 +525,11 @@ var proxy_handlers = map[string]*handler {
 		methods: []string{"GET"},
 		function: proxy_stat_handler,
 	},
+	"/": &handler{
+		params: 0,
+		methods: []string{"GET"},
+		function: common_handler,
+	},
 }
 
 func get_content_length(header http.Header) uint64 {
@@ -514,6 +563,8 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 		err: errors.NewKeyError(req.URL.String(), http.StatusBadRequest, "there is no registered handler for this path"),
 	}
 
+	var h *handler = nil
+
 	if req.Method == "HEAD" {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
@@ -530,7 +581,35 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 			path = req.URL.Path
 			reply.err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, fmt.Sprintf("could not split URL"))
 		} else {
-			h, ok := proxy_handlers[hstrings[1]]
+			var ok bool
+
+			param_strings := make([]string, 0)
+			h, ok = proxy_handlers[hstrings[1]]
+			if !ok {
+				h = proxy_handlers["/"]
+				param_strings = []string{path}
+				ok = true
+			} else {
+				if len(hstrings) != 3 {
+					reply.err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
+						fmt.Sprintf("not enough path parts for handler: %v, must be at least: %d",
+							len(hstrings) - 1, h.params + 1))
+					ok = false
+				} else {
+					param_strings = strings.SplitN(hstrings[2], "/", h.params)
+					if len(param_strings) < h.params {
+						reply.err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
+							fmt.Sprintf("not enough path parameters for handler: %v, must be at least: %d",
+								len(param_strings), h.params))
+						ok = false
+					} else if h.params > 0 && len(param_strings[h.params - 1]) == 0 {
+						reply.err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
+							fmt.Sprintf("last path parameter can not be empty"))
+						ok = false
+					}
+				}
+			}
+
 			if ok {
 				method_matched := false
 				for _, method := range h.methods {
@@ -541,22 +620,12 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 				}
 
 				if method_matched {
-					tmp := strings.SplitN(hstrings[2], "/", h.params)
-					if len(tmp) >= h.params {
-						reply = h.function(w, req, tmp...)
-					} else {
-						reply.err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
-							fmt.Sprintf("not enough path parameters for handler: %v, must be at least: %d",
-								len(tmp), h.params))
-					}
+					reply = h.function(w, req, param_strings...)
 				} else {
 					reply.err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
 						fmt.Sprintf("method doesn't match: provided: %s, required: %v",
 							req.Method, h.methods))
 				}
-			} else {
-				tmp := []string{path}
-				reply = common_handler(w, req, tmp...)
 			}
 		}
 	}
@@ -573,9 +642,14 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	duration := time.Since(start)
+	if h != nil {
+		h.e.Push(content_length, duration, reply.status)
+	}
+
 	log.Printf("access_log: method: '%s', path: '%s', encoded-uri: '%s', status: %d, size: %d, time: %.3f ms, err: '%v'\n",
 		req.Method, path, req.URL.RequestURI(), reply.status, content_length,
-		float64(time.Since(start).Nanoseconds()) / 1000000.0, msg)
+		float64(duration.Nanoseconds()) / 1000000.0, msg)
 
 	if reply.err != nil {
 		http.Error(w, reply.err.Error(), reply.status)
@@ -617,6 +691,11 @@ func main() {
 	if *config_file == "" {
 		log.Fatal("You must specify config file")
 	}
+
+	for _, h := range proxy_handlers {
+		h.e = estimator.NewEstimator()
+	}
+	estimator_scan_handlers = proxy_handlers
 
 	var err error
 
