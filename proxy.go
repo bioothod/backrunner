@@ -436,15 +436,15 @@ func proxy_stat_handler(w http.ResponseWriter, req *http.Request, strings ...str
 	}
 
 	for name, h := range estimator_scan_handlers {
-		e := h.e.Read()
+		c := h.e.Read()
 
 		m := Metric {
-			BPS:		uint64(e.BPS),
+			BPS:		c.BPS,
 			RPS:		make(map[string]uint64),
 		}
 
-		for k, v := range e.RPS {
-			m.RPS[fmt.Sprintf("%d", k)] = uint64(v)
+		for k, v := range c.RPS {
+			m.RPS[fmt.Sprintf("%d", k)] = v
 		}
 
 		res.Handlers[name] = m
@@ -644,7 +644,7 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 
 	duration := time.Since(start)
 	if h != nil {
-		h.e.Push(content_length, duration, reply.status)
+		h.e.Push(content_length, reply.status)
 	}
 
 	log.Printf("access_log: method: '%s', path: '%s', encoded-uri: '%s', status: %d, size: %d, time: %.3f ms, err: '%v'\n",

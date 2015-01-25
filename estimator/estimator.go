@@ -1,37 +1,66 @@
 package estimator
 
 import (
-	"math"
 	"sync"
 	"time"
 )
 
+const EstimatorInterval time.Duration = 5 * time.Second
+
+type Stat struct {
+	UpdateTime	time.Time
+	BPS		uint64
+	RPS		map[int]uint64
+}
+
+func (src *Stat) CopyInto(dst *Stat) {
+	dst.UpdateTime = src.UpdateTime
+
+	dst.BPS = src.BPS
+	for k, v := range src.RPS {
+		dst.RPS[k] = v
+	}
+}
+
+func (s *Stat) Clear() {
+	s.BPS = 0
+	s.UpdateTime = time.Now().Add(EstimatorInterval)
+	s.RPS = make(map[int]uint64)
+
+	for k, _ := range s.RPS {
+		s.RPS[k] = 0
+	}
+}
+
+func (s *Stat) Adjust() {
+	s.BPS = uint64(float64(s.BPS) / EstimatorInterval.Seconds())
+	for k, v := range s.RPS {
+		s.RPS[k] = uint64(float64(v) / EstimatorInterval.Seconds())
+	}
+}
+
+
 type Estimator struct {
 	sync.RWMutex
 
-	BPS		float64
-	RPS		map[int]float64
+
+	Cache		Stat
+	Current		Stat
 }
 
 func NewEstimator() *Estimator {
 	e := &Estimator {
-		RPS: make(map[int]float64),
 	}
+
+	e.Cache.Clear()
+	e.Current.Clear()
 
 	return e
 }
 
-func MovingExpAvg(value, oldValue, fdtime, ftime float64) float64 {
-	alpha := 1.0 - math.Exp(-fdtime/ftime)
-	r := alpha*value + (1.0-alpha)*oldValue
-	return r
-}
-
-func (e *Estimator) Push(size uint64, duration time.Duration, status int) {
+func (e *Estimator) Push(size uint64, status int) {
 	e.Lock()
 	defer e.Unlock()
-
-	e.BPS = MovingExpAvg(float64(size), e.BPS, float64(duration), 1.0)
 
 	switch {
 	case status >= 200 && status < 300:
@@ -44,18 +73,27 @@ func (e *Estimator) Push(size uint64, duration time.Duration, status int) {
 		status = 500
 	}
 
-	e.RPS[status] = MovingExpAvg(1, e.RPS[status], float64(duration), 1.0)
+	tm := time.Now()
+
+	if tm.After(e.Current.UpdateTime) {
+		e.Current.CopyInto(&e.Cache)
+		(&e.Cache).Adjust()
+
+		e.Current.Clear()
+	}
+
+
+	e.Current.RPS[status] += 1
+	e.Current.BPS += size
 }
 
-func (e *Estimator) Read() *Estimator {
+func (e *Estimator) Read() *Stat {
 	e.RLock()
 	defer e.RUnlock()
 
-	res := NewEstimator()
-	res.BPS = e.BPS
-	for k, v := range e.RPS {
-		res.RPS[k] = v
-	}
+	res := &Stat {}
+	res.Clear()
 
+	e.Cache.CopyInto(res)
 	return res
 }
