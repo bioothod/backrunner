@@ -26,16 +26,24 @@ import (
 const (
 	ProfilePath string = "backrunner.profile"
 
-	// time to write 1 byte into error bucket in seconds
-	// this is randomly selected error gain for buckets where upload has failed
-	BucketWriteErrorPain float64	= 10000000000.0
-
-	PainNoStats float64		= 15000000000.0
-	PainStatError float64		= 15000000000.0
-	PainStatRO float64		= 15000000000.0
-	PainNoGroup float64		= 15000000000.0
 	PainNoFreeSpaceSoft float64	= 5000000000.0
 	PainNoFreeSpaceHard float64	= 50000000000000.0
+
+	// pain for read-only groups
+	PainStatRO float64		= PainNoFreeSpaceHard / 2
+
+	// this is randomly selected error gain for buckets where upload has failed
+	BucketWriteErrorPain float64	= PainNoFreeSpaceHard / 3
+
+	// pain for group without statistics
+	PainNoStats float64		= PainNoFreeSpaceHard / 3
+
+	// pain for group where statistics contains error field
+	PainStatError float64		= PainNoFreeSpaceHard / 3
+
+	// pain for bucket which do not have its group in stats
+	PainNoGroup float64		= PainNoFreeSpaceHard / 3
+
 )
 
 func URIOffsetSize(req *http.Request) (offset uint64, size uint64, err error) {
@@ -932,6 +940,7 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 
 			case <-bctl.signals:
 				bctl.ReadConfig()
+				bctl.ReadAllBucketsMeta()
 				bctl.BucketStatUpdate()
 			}
 		}
