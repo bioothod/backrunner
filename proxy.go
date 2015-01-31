@@ -647,8 +647,8 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 		h.e.Push(content_length, reply.status)
 	}
 
-	log.Printf("access_log: method: '%s', path: '%s', encoded-uri: '%s', status: %d, size: %d, time: %.3f ms, err: '%v'\n",
-		req.Method, path, req.URL.RequestURI(), reply.status, content_length,
+	log.Printf("access_log: method: '%s', client: '%s', path: '%s', encoded-uri: '%s', status: %d, size: %d, time: %.3f ms, err: '%v'\n",
+		req.Method, req.RemoteAddr, path, req.URL.RequestURI(), reply.status, content_length,
 		float64(duration.Nanoseconds()) / 1000000.0, msg)
 
 	if reply.err != nil {
