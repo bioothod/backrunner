@@ -219,6 +219,8 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 
 		}
 
+		s.SetNamespace(b.Name)
+
 		for group_id, sg := range b.Group {
 			st, err := sg.FindStatBackendKey(s, key, group_id)
 			if err != nil {
@@ -276,9 +278,10 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 				bs.Pain += free_space_pain
 			}
 
-			bs.Pain += st.PIDPain()
+			pp := st.PIDPain()
 
-			bs.pains = append(bs.pains, st.PIDPain())
+			bs.Pain += pp
+			bs.pains = append(bs.pains, pp)
 			bs.free_rates = append(bs.free_rates, free_space_rate)
 		}
 
@@ -290,12 +293,11 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 
 		bs.Pain += float64(diff) * PainNoGroup
 
-		log.Printf("find-bucket: url: %s, bucket: %s, content-length: %d, groups: %v, success-groups: %v, error-groups: %v, pain: %f, pains: %v, free_rates: %v\n",
-			req.URL.String(), b.Name, req.ContentLength, b.Meta.Groups, bs.SuccessGroups, bs.ErrorGroups, bs.Pain,
-			bs.pains, bs.free_rates)
-
 		// do not even consider buckets without free space even in one group
 		if bs.Pain >= PainNoFreeSpaceHard {
+			log.Printf("find-bucket: url: %s, bucket: %s, content-length: %d, groups: %v, success-groups: %v, error-groups: %v, pain: %f, pains: %v, free_rates: %v: pain is higher than HARD limit\n",
+				req.URL.String(), b.Name, req.ContentLength, b.Meta.Groups, bs.SuccessGroups, bs.ErrorGroups, bs.Pain,
+				bs.pains, bs.free_rates)
 			continue
 		}
 
@@ -312,6 +314,14 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 	}
 
 	bctl.RUnlock()
+
+	str := make([]string, 0)
+	for _, bs := range stat {
+		str = append(str, fmt.Sprintf("{bucket: %s, success-groups: %v, error-groups: %v, groups: %v, pain: %f, free-rates: %v}",
+			bs.Bucket.Name, bs.SuccessGroups, bs.ErrorGroups, bs.Bucket.Meta.Groups, bs.Pain, bs.free_rates))
+	}
+
+	log.Printf("find-bucket: url: %s, content-length: %d: %v", req.URL.String(), req.ContentLength, str)
 
 	// there are no buckets suitable for this request
 	// either there is no space in either bucket, or there are no buckets at all
@@ -364,8 +374,9 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 		r -= int64(bs.Range)
 		if r <= 0 {
 			log.Printf("find-bucket: url: %s, selected bucket: %s, content-length: %d, groups: %v, success-groups: %v, error-groups: %v, pain: %f, pains: %v, free_rates: %v\n",
-				req.URL.String(), bs.Bucket.Name, req.ContentLength, bs.Bucket.Meta.Groups, bs.SuccessGroups, bs.ErrorGroups, bs.Pain,
-				bs.pains, bs.free_rates)
+				req.URL.String(), bs.Bucket.Name, req.ContentLength,
+				bs.Bucket.Meta.Groups, bs.SuccessGroups, bs.ErrorGroups,
+				bs.Pain, bs.pains, bs.free_rates)
 			return bs.Bucket
 		}
 	}
@@ -434,6 +445,7 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 
 	bctl.RLock()
 
+	str := make([]string, 0)
 	for _, res := range reply.Servers {
 		sg, ok := bucket.Group[res.Group]
 		if ok {
@@ -449,28 +461,21 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 				}
 				st.PIDUpdate(update_pain)
 
-				log.Printf("bucket-upload: bucket: %s, key: %s, size: %d, time: %d us, group: %d, e: %f, error: %v, pain: %f -> %f\n",
-					bucket.Name, key, total_size, time_us, res.Group, e, estring, old_pain, st.PIDPain())
+				str = append(str, fmt.Sprintf("{group: %d, time: %d us, e: %f, error: %v, pain: %f -> %f}",
+					res.Group, time_us, e, estring, old_pain, st.PIDPain()))
 			}
 		}
 	}
 
 	if len(reply.SuccessGroups) == 0 {
 		for _, group_id := range bucket.Meta.Groups {
-			sg, ok := bucket.Group[group_id]
-			if ok {
-				st, back_err := sg.FindStatBackendKey(s, key, group_id)
-				if back_err == nil {
-					old_pain := st.PIDPain()
-
-					log.Printf("bucket-upload: bucket: %s, key: %s, size: %d, time: %d us, error group: %d, e: %f, pain: %f -> %f\n",
-						bucket.Name, key, total_size, time_us, group_id, e, old_pain, st.PIDPain())
-				}
-			}
+			str = append(str, fmt.Sprintf("{error-group: %d, time: %d us}", group_id, time_us))
 		}
 	}
 
 	bctl.RUnlock()
+
+	log.Printf("bucket-upload: bucket: %s, key: %s, size: %d: %v\n", bucket.Name, key, total_size, str)
 
 	return
 }
