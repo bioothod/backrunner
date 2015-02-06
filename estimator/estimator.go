@@ -26,10 +26,6 @@ func (s *Stat) Clear() {
 	s.BPS = 0
 	s.UpdateTime = time.Now().Add(EstimatorInterval)
 	s.RPS = make(map[int]uint64)
-
-	for k, _ := range s.RPS {
-		s.RPS[k] = 0
-	}
 }
 
 func (s *Stat) Adjust() {
@@ -58,6 +54,17 @@ func NewEstimator() *Estimator {
 	return e
 }
 
+func (e *Estimator) UpdateCache() {
+	tm := time.Now()
+
+	if tm.After(e.Current.UpdateTime) {
+		e.Current.CopyInto(&e.Cache)
+		e.Cache.Adjust()
+
+		e.Current.Clear()
+	}
+}
+
 func (e *Estimator) Push(size uint64, status int) {
 	e.Lock()
 	defer e.Unlock()
@@ -73,15 +80,7 @@ func (e *Estimator) Push(size uint64, status int) {
 		status = 500
 	}
 
-	tm := time.Now()
-
-	if tm.After(e.Current.UpdateTime) {
-		e.Current.CopyInto(&e.Cache)
-		(&e.Cache).Adjust()
-
-		e.Current.Clear()
-	}
-
+	e.UpdateCache()
 
 	e.Current.RPS[status] += 1
 	e.Current.BPS += size
@@ -90,6 +89,8 @@ func (e *Estimator) Push(size uint64, status int) {
 func (e *Estimator) Read() *Stat {
 	e.RLock()
 	defer e.RUnlock()
+
+	e.UpdateCache()
 
 	res := &Stat {}
 	res.Clear()
