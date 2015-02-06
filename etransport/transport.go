@@ -89,6 +89,7 @@ func (e *Elliptics) Stat() (stat *elliptics.DnetStat, err error) {
 	if err != nil {
 		return
 	}
+	defer s.Delete()
 
 	stat = s.DnetStat()
 

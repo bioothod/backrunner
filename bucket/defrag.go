@@ -49,6 +49,7 @@ func (bctl *BucketCtl) DefragBuckets(defrag_buckets []bstat) {
 		log.Printf("defag: could not create new session: %v\n", err)
 		return
 	}
+	defer s.Delete()
 
 	for idx := len(defrag_buckets) - 1; idx >= 0; idx-- {
 		b := &defrag_buckets[idx]
@@ -60,8 +61,7 @@ func (bctl *BucketCtl) DefragBuckets(defrag_buckets []bstat) {
 			log.Printf("defrag: starting defragmentation in bucket: %s, %s, free-space-rate: %f, removed-space-rate: %f\n",
 						b.bucket.Name, b.ab.String(), b.free_space_rate, b.removed_space_rate)
 
-			for _ = range s.BackendStartDefrag(b.ab.Addr.DnetAddr(), b.ab.Backend) {
-			}
+			s.BackendStartDefrag(b.ab.Addr.DnetAddr(), b.ab.Backend)
 
 			db[b.bucket]++
 			if len(db) >= bctl.Conf.Proxy.DefragMaxBuckets {

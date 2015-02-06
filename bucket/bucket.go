@@ -311,6 +311,7 @@ func ReadBucket(ell *etransport.Elliptics, name string) (bucket *Bucket, err err
 		log.Printf("read-bucket: %s: could not create metadata session: %v", name, err)
 		return
 	}
+	defer ms.Delete()
 
 	ms.SetNamespace(BucketNamespace)
 
@@ -353,6 +354,7 @@ func WriteBucket(ell *etransport.Elliptics, meta *BucketMsgpack) (bucket *Bucket
 		log.Printf("%s: could not create metadata session: %v", meta.Name, err)
 		return
 	}
+	defer ms.Delete()
 
 	ms.SetNamespace(BucketNamespace)
 

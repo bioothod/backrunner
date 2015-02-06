@@ -190,6 +190,7 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 			fmt.Sprintf("get-bucket: could not create metadata session: %v", err))
 		return bctl.Bucket[rand.Intn(len(bctl.Bucket))]
 	}
+	defer s.Delete()
 
 	type bucket_stat struct {
 		Bucket		*Bucket
@@ -418,6 +419,7 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 			fmt.Sprintf("upload: could not create data session: %v", err))
 		return
 	}
+	defer s.Delete()
 
 	s.SetFilter(elliptics.SessionFilterAll)
 	s.SetNamespace(bucket.Name)
@@ -523,6 +525,7 @@ func (bctl *BucketCtl) Get(bname, key string, req *http.Request) (resp []byte, e
 			fmt.Sprintf("get: could not create data session: %v", err))
 		return
 	}
+	defer s.Delete()
 
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.Meta.Groups)
@@ -568,6 +571,7 @@ func (bctl *BucketCtl) Stream(bname, key string, w http.ResponseWriter, req *htt
 			fmt.Sprintf("stream: could not create data session: %v", err))
 		return
 	}
+	defer s.Delete()
 
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.Meta.Groups)
@@ -609,6 +613,7 @@ func (bctl *BucketCtl) Lookup(bname, key string, req *http.Request) (reply *repl
 			fmt.Sprintf("lookup: could not create data session: %v", err))
 		return
 	}
+	defer s.Delete()
 
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.Meta.Groups)
@@ -638,6 +643,7 @@ func (bctl *BucketCtl) Delete(bname, key string, req *http.Request) (err error) 
 			fmt.Sprintf("delete: could not create data session: %v", err))
 		return
 	}
+	defer s.Delete()
 
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.Meta.Groups)
@@ -672,6 +678,7 @@ func (bctl *BucketCtl) BulkDelete(bname string, keys []string, req *http.Request
 			fmt.Sprintf("bulk_delete: could not create data session: %v", err))
 		return
 	}
+	defer s.Delete()
 
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.Meta.Groups)
