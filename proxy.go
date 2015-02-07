@@ -351,7 +351,7 @@ func bulk_delete_handler(w http.ResponseWriter, req *http.Request, strings ...st
 func common_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
 	if len(proxy.bctl.Conf.Proxy.Root) == 0 {
 		err := errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
-			fmt.Sprintf("common: root options is not configured, reading files is being denied"))
+			fmt.Sprintf("common: root option is not configured, reading files is being denied"))
 		return Reply {
 			err: err,
 			status: http.StatusServiceUnavailable,
