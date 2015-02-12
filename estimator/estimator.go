@@ -28,10 +28,11 @@ func (s *Stat) Clear() {
 	s.RPS = make(map[int]uint64)
 }
 
-func (s *Stat) Adjust() {
-	s.BPS = uint64(float64(s.BPS) / EstimatorInterval.Seconds())
+func (s *Stat) Adjust(tm time.Time) {
+	d := tm.Sub(s.UpdateTime).Seconds()
+	s.BPS = uint64(float64(s.BPS) / d)
 	for k, v := range s.RPS {
-		s.RPS[k] = uint64(float64(v) / EstimatorInterval.Seconds())
+		s.RPS[k] = uint64(float64(v) / d)
 	}
 }
 
@@ -59,7 +60,7 @@ func (e *Estimator) UpdateCache() {
 
 	if tm.After(e.Current.UpdateTime) {
 		e.Current.CopyInto(&e.Cache)
-		e.Cache.Adjust()
+		e.Cache.Adjust(tm)
 
 		e.Current.Clear()
 	}
@@ -83,7 +84,9 @@ func (e *Estimator) Push(size uint64, status int) {
 	e.UpdateCache()
 
 	e.Current.RPS[status] += 1
-	e.Current.BPS += size
+	if (uint64(size) > 0) {
+		e.Current.BPS += size
+	}
 }
 
 func (e *Estimator) Read() *Stat {
