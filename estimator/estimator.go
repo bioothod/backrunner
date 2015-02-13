@@ -29,7 +29,7 @@ func (s *Stat) Clear() {
 }
 
 func (s *Stat) Adjust(tm time.Time) {
-	d := tm.Sub(s.UpdateTime).Seconds()
+	d := tm.Sub(s.UpdateTime).Seconds() + EstimatorInterval.Seconds()
 	s.BPS = uint64(float64(s.BPS) / d)
 	for k, v := range s.RPS {
 		s.RPS[k] = uint64(float64(v) / d)
