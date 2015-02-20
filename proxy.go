@@ -703,7 +703,7 @@ func main() {
 	conf := &config.ProxyConfig {}
 	err = conf.Load(*config_file)
 	if err != nil {
-		log.Fatalf("Could not load config %s: %q", config_file, err)
+		log.Fatalf("Could not load config %s: %q", *config_file, err)
 	}
 
 	if len(conf.Proxy.Address) == 0 {
