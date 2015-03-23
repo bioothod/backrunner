@@ -426,6 +426,9 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 	s.SetGroups(bucket.Meta.Groups)
 	s.SetTimeout(100)
 
+	log.Printf("upload-trace-id: %x: url: %s, bucket: %s, key: %s, id: %s\n",
+		s.GetTraceID(), req.URL.String(), bucket.Name, key, s.Transform(key))
+
 	offset, _, err := URIOffsetSize(req)
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, fmt.Sprintf("upload: %v", err))
@@ -530,6 +533,9 @@ func (bctl *BucketCtl) Get(bname, key string, req *http.Request) (resp []byte, e
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.Meta.Groups)
 
+	log.Printf("get-trace-id: %x: url: %s, bucket: %s, key: %s, id: %s\n",
+		s.GetTraceID(), req.URL.String(), bucket.Name, key, s.Transform(key))
+
 	offset, size, err := URIOffsetSize(req)
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, fmt.Sprintf("get: %v", err))
@@ -576,6 +582,9 @@ func (bctl *BucketCtl) Stream(bname, key string, w http.ResponseWriter, req *htt
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.Meta.Groups)
 
+	log.Printf("stream-trace-id: %x: url: %s, bucket: %s, key: %s, id: %s\n",
+		s.GetTraceID(), req.URL.String(), bucket.Name, key, s.Transform(key))
+
 	offset, size, err := URIOffsetSize(req)
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, fmt.Sprintf("stream: %v", err))
@@ -618,6 +627,9 @@ func (bctl *BucketCtl) Lookup(bname, key string, req *http.Request) (reply *repl
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.Meta.Groups)
 
+	log.Printf("lookup-trace-id: %x: url: %s, bucket: %s, key: %s, id: %s\n",
+		s.GetTraceID(), req.URL.String(), bucket.Name, key, s.Transform(key))
+
 	reply, err = bucket.lookup_serialize(false, s.ParallelLookup(key))
 	return
 }
@@ -647,6 +659,9 @@ func (bctl *BucketCtl) Delete(bname, key string, req *http.Request) (err error) 
 
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.Meta.Groups)
+
+	log.Printf("delete-trace-id: %x: url: %s, bucket: %s, key: %s, id: %s\n",
+		s.GetTraceID(), req.URL.String(), bucket.Name, key, s.Transform(key))
 
 	for r := range s.Remove(key) {
 		err = r.Error()
@@ -682,6 +697,9 @@ func (bctl *BucketCtl) BulkDelete(bname string, keys []string, req *http.Request
 
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.Meta.Groups)
+
+	log.Printf("bulk-delete-trace-id: %x: url: %s, bucket: %s, keys: %v\n",
+		s.GetTraceID(), req.URL.String(), bucket.Name, keys)
 
 	for r := range s.BulkRemove(keys) {
 		err = r.Error()

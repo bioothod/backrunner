@@ -214,7 +214,8 @@ func (b *Bucket) check_auth(r *http.Request, required_flags uint64) (err error) 
 		return
 	}
 
-	log.Printf("check-auth: user: %s, token: %s, flags: %x, required: %x\n", acl.User, acl.Token, acl.Flags, required_flags)
+	log.Printf("check-auth: url: %s, user: %s, token: %s, flags: %x, required: %x\n",
+		r.URL.String(), acl.User, acl.Token, acl.Flags, required_flags)
 
 	// only require required_flags check if its not @BucketAuthEmpty
 	// @BucketAuthEmpty required_flags is set by reader, non BucketAuthEmpty required_flags are supposed to mean modifications
