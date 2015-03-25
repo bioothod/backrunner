@@ -4,6 +4,16 @@ RUN	apt-get update && \
 	apt-get upgrade -y
 
 RUN 	. /etc/profile.d/go.sh && \
+	VERSION=go1.4.2 && \
+	curl -f -I https://storage.googleapis.com/golang/$VERSION.linux-amd64.tar.gz && \
+	test `go version | awk {'print $3'}` = $VERSION || \
+	echo "Downloading" && \
+	curl -O https://storage.googleapis.com/golang/$VERSION.linux-amd64.tar.gz && \
+	rm -rf /usr/local/go && \
+	tar -C /usr/local -xf $VERSION.linux-amd64.tar.gz && \
+	rm -f $VERSION.linux-amd64.tar.gz
+
+RUN 	. /etc/profile.d/go.sh && \
 	cd /root/go/src/github.com/bioothod/elliptics-go/elliptics && \
 	git checkout master && \
 	git pull && \
