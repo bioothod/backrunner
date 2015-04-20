@@ -91,6 +91,7 @@ func (e *Elliptics) Stat() (stat *elliptics.DnetStat, err error) {
 	}
 	defer s.Delete()
 
+	s.SetTimeout(10)
 	stat = s.DnetStat()
 
 	e.Lock()
