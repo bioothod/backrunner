@@ -33,16 +33,16 @@ const (
 	PainStatRO float64		= PainNoFreeSpaceHard / 2
 
 	// this is randomly selected error gain for buckets where upload has failed
-	BucketWriteErrorPain float64	= PainNoFreeSpaceHard / 3
+	BucketWriteErrorPain float64	= PainNoFreeSpaceHard / 2
 
 	// pain for group without statistics
-	PainNoStats float64		= PainNoFreeSpaceHard / 3
+	PainNoStats float64		= PainNoFreeSpaceHard / 2
 
 	// pain for group where statistics contains error field
-	PainStatError float64		= PainNoFreeSpaceHard / 3
+	PainStatError float64		= PainNoFreeSpaceHard / 2
 
 	// pain for bucket which do not have its group in stats
-	PainNoGroup float64		= PainNoFreeSpaceHard / 3
+	PainNoGroup float64		= PainNoFreeSpaceHard / 2
 
 )
 
@@ -296,17 +296,14 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 
 		// do not even consider buckets without free space even in one group
 		if bs.Pain >= PainNoFreeSpaceHard {
-			log.Printf("find-bucket: url: %s, bucket: %s, content-length: %d, groups: %v, success-groups: %v, error-groups: %v, pain: %f, pains: %v, free_rates: %v: pain is higher than HARD limit\n",
-				req.URL.String(), b.Name, req.ContentLength, b.Meta.Groups, bs.SuccessGroups, bs.ErrorGroups, bs.Pain,
-				bs.pains, bs.free_rates)
+			//log.Printf("find-bucket: url: %s, bucket: %s, content-length: %d, groups: %v, success-groups: %v, error-groups: %v, pain: %f, pains: %v, free_rates: %v: pain is higher than HARD limit\n",
+			//	req.URL.String(), b.Name, req.ContentLength, b.Meta.Groups, bs.SuccessGroups, bs.ErrorGroups, bs.Pain,
+			//	bs.pains, bs.free_rates)
 			continue
 		}
 
 		if bs.Pain != 0 {
 			bs.Range = 1.0 / bs.Pain
-			if bs.Range == 0 {
-				bs.Range = 1
-			}
 		} else {
 			bs.Range = 1.0
 		}
@@ -316,17 +313,17 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 
 	bctl.RUnlock()
 
-	str := make([]string, 0)
-	for _, bs := range stat {
-		str = append(str, fmt.Sprintf("{bucket: %s, success-groups: %v, error-groups: %v, groups: %v, pain: %f, free-rates: %v}",
-			bs.Bucket.Name, bs.SuccessGroups, bs.ErrorGroups, bs.Bucket.Meta.Groups, bs.Pain, bs.free_rates))
-	}
-
-	log.Printf("find-bucket: url: %s, content-length: %d: %v", req.URL.String(), req.ContentLength, str)
-
 	// there are no buckets suitable for this request
 	// either there is no space in either bucket, or there are no buckets at all
 	if len(stat) == 0 {
+		str := make([]string, 0)
+		for _, bs := range stat {
+			str = append(str, fmt.Sprintf("{bucket: %s, success-groups: %v, error-groups: %v, groups: %v, pain: %f, free-rates: %v}",
+				bs.Bucket.Name, bs.SuccessGroups, bs.ErrorGroups, bs.Bucket.Meta.Groups, bs.Pain, bs.free_rates))
+		}
+
+		log.Printf("find-bucket: url: %s, content-length: %d: there are no suitable buckets: %v",
+			req.URL.String(), req.ContentLength, str)
 		return nil
 	}
 
@@ -351,6 +348,14 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 
 		stat = tmp
 	}
+
+	str := make([]string, 0)
+	for _, bs := range stat {
+		str = append(str, fmt.Sprintf("{bucket: %s, success-groups: %v, error-groups: %v, groups: %v, pain: %f, free-rates: %v}",
+			bs.Bucket.Name, bs.SuccessGroups, bs.ErrorGroups, bs.Bucket.Meta.Groups, bs.Pain, bs.free_rates))
+	}
+
+	log.Printf("find-bucket: url: %s, content-length: %d: %v", req.URL.String(), req.ContentLength, str)
 
 	var sum int64 = 0
 	for {
@@ -468,7 +473,13 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 
 				str = append(str, fmt.Sprintf("{group: %d, time: %d us, e: %f, error: %v, pain: %f -> %f}",
 					res.Group, time_us, e, estring, old_pain, st.PIDPain()))
+			} else {
+				str = append(str, fmt.Sprintf("{group: %d, time: %d us, e: %f, error: no backend stat}",
+					res.Group, time_us, e))
 			}
+		} else {
+			str = append(str, fmt.Sprintf("{group: %d, time: %d us, e: %f, error: no group stat}",
+				res.Group, time_us, e))
 		}
 	}
 
