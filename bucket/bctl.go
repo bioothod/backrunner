@@ -223,9 +223,6 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 
 		s.SetNamespace(b.Name)
 
-		var min_records uint64 = 1<<31-1
-		var max_records uint64 = 0
-
 		for group_id, sg := range b.Group {
 			st, err := sg.FindStatBackendKey(s, key, group_id)
 			if err != nil {
@@ -279,18 +276,7 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 			bs.Pain += pp
 			bs.pains = append(bs.pains, pp)
 			bs.free_rates = append(bs.free_rates, free_space_rate)
-
-			tmp := st.VFS.RecordsTotal - st.VFS.RecordsRemoved
-			if tmp < min_records {
-				min_records = tmp
-			}
-
-			if tmp > max_records {
-				max_records = tmp
-			}
 		}
-
-		bs.Pain += float64(max_records - min_records) * PainDiscrepancy
 
 		total_groups := len(bs.SuccessGroups) + len(bs.ErrorGroups)
 		diff := 0
@@ -299,6 +285,36 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 		}
 
 		bs.Pain += float64(diff) * PainNoGroup
+
+		// calculate discrepancy pain:
+		// run over all address+backends in every group in given bucket,
+		// sum up number of live records
+		// set discrepancy as a maximum difference between number of records among all groups
+		var min_records uint64 = 1<<31-1
+		var max_records uint64 = 0
+
+		records := make([]uint64, 0)
+		for _, sg := range b.Group {
+			var r uint64 = 0
+
+			for _, sb := range sg.Ab {
+				r += sb.VFS.RecordsTotal - sb.VFS.RecordsRemoved
+			}
+
+			records = append(records, r)
+		}
+
+		for _, r := range records {
+			if r < min_records {
+				min_records = r
+			}
+
+			if r > max_records {
+				max_records = r
+			}
+		}
+		bs.Pain += float64(max_records - min_records) * PainDiscrepancy
+
 
 		// do not even consider buckets without free space even in one group
 		if bs.Pain >= PainNoFreeSpaceHard {
