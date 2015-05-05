@@ -119,11 +119,6 @@ func (bctl *BucketCtl) ScanBuckets() {
 
 		for group_id, stat_group := range b.Group {
 			for ab, st := range stat_group.Ab {
-				if st.Error.Code != 0 {
-					// do not start defragmentation in failed backends
-					continue
-				}
-
 				if st.RO {
 					log.Printf("defrag: bucket: %s, %s: backend is in read-only mode\n",
 						b.Name, ab.String())

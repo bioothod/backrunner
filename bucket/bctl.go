@@ -234,15 +234,6 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 				continue
 			}
 
-			if st.Error.Code != 0 {
-				// this is usually a timeout error
-
-				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
-
-				bs.Pain += PainStatError
-				continue
-			}
-
 			if st.RO {
 				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
 
