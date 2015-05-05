@@ -44,6 +44,7 @@ const (
 	// pain for bucket which do not have its group in stats
 	PainNoGroup float64		= PainNoFreeSpaceHard / 2
 
+	PainDiscrepancy float64		= 1000.0
 )
 
 func URIOffsetSize(req *http.Request) (offset uint64, size uint64, err error) {
@@ -222,6 +223,9 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 
 		s.SetNamespace(b.Name)
 
+		var min_records uint64 = 1<<31-1
+		var max_records uint64 = 0
+
 		for group_id, sg := range b.Group {
 			st, err := sg.FindStatBackendKey(s, key, group_id)
 			if err != nil {
@@ -275,7 +279,18 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 			bs.Pain += pp
 			bs.pains = append(bs.pains, pp)
 			bs.free_rates = append(bs.free_rates, free_space_rate)
+
+			tmp := st.VFS.RecordsTotal - st.VFS.RecordsRemoved
+			if tmp < min_records {
+				min_records = tmp
+			}
+
+			if tmp > max_records {
+				max_records = tmp
+			}
 		}
+
+		bs.Pain += float64(max_records - min_records) * PainDiscrepancy
 
 		total_groups := len(bs.SuccessGroups) + len(bs.ErrorGroups)
 		diff := 0
