@@ -205,6 +205,7 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 	}
 
 	stat := make([]*bucket_stat, 0)
+	failed := make([]*bucket_stat, 0)
 
 	bctl.RLock()
 
@@ -242,8 +243,15 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 				continue
 			}
 
+			if st.Error.Code != 0 {
+				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
+
+				bs.Pain += PainStatError
+				continue
+			}
+
 			// this is an empty stat structure
-			if st.VFS.TotalSizeLimit == 0 || st.VFS.Total  == 0{
+			if st.VFS.TotalSizeLimit == 0 || st.VFS.Total  == 0 {
 				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
 
 				bs.Pain += PainNoStats
@@ -321,6 +329,7 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 			//log.Printf("find-bucket: url: %s, bucket: %s, content-length: %d, groups: %v, success-groups: %v, error-groups: %v, pain: %f, pains: %v, free_rates: %v: pain is higher than HARD limit\n",
 			//	req.URL.String(), b.Name, req.ContentLength, b.Meta.Groups, bs.SuccessGroups, bs.ErrorGroups, bs.Pain,
 			//	bs.pains, bs.free_rates)
+			failed = append(failed, bs)
 			continue
 		}
 
@@ -339,7 +348,7 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 	// either there is no space in either bucket, or there are no buckets at all
 	if len(stat) == 0 {
 		str := make([]string, 0)
-		for _, bs := range stat {
+		for _, bs := range failed {
 			str = append(str, fmt.Sprintf("{bucket: %s, success-groups: %v, error-groups: %v, groups: %v, pain: %f, free-rates: %v}",
 				bs.Bucket.Name, bs.SuccessGroups, bs.ErrorGroups, bs.Bucket.Meta.Groups, bs.Pain, bs.free_rates))
 		}
