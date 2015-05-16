@@ -9,7 +9,7 @@ import (
 	"github.com/bioothod/backrunner/etransport"
 	"github.com/bioothod/backrunner/reply"
 	"github.com/bioothod/elliptics-go/elliptics"
-	"github.com/vmihailenco/msgpack"
+	"gopkg.in/vmihailenco/msgpack.v2"
 	"fmt"
 	"log"
 	"net/http"
