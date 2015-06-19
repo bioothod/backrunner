@@ -820,10 +820,17 @@ func (bctl *BucketCtl) ReadBucketConfig() error {
 		return err
 	}
 
+	stat, err := bctl.e.Stat()
+	if err != nil {
+		return err
+	}
+
 	bctl.Lock()
 	bctl.Bucket = new_buckets
+	err = bctl.BucketStatUpdateNolock(stat)
 	bctl.Unlock()
 
+	log.Printf("Bucket config has been updated, there are %d writable buckets\n", len(new_buckets))
 	return nil
 }
 
@@ -847,6 +854,7 @@ func (bctl *BucketCtl) ReadProxyConfig() error {
 	log.SetOutput(bctl.e.LogFile)
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
+	log.Printf("Proxy config has been updated\n")
 	return nil
 
 }
@@ -886,53 +894,6 @@ func (bctl *BucketCtl) ReadBucketsMetaNolock(names []string) (new_buckets []*Buc
 	return
 }
 
-func (bctl *BucketCtl) ReadAllBucketsMeta() (err error) {
-	bnames := make([]string, 0)
-	bback_names := make([]string, 0)
-
-	bctl.RLock()
-	if len(bctl.Bucket) != 0 {
-		for _, b := range bctl.Bucket {
-			bnames = append(bnames, b.Name)
-		}
-	}
-	if len(bctl.BackBucket) != 0 {
-		for _, b := range bctl.BackBucket {
-			bback_names = append(bnames, b.Name)
-		}
-	}
-	bctl.RUnlock()
-
-
-	new_buckets, err := bctl.ReadBucketsMetaNolock(bnames)
-	if err != nil {
-		log.Printf("read-all-buckets-meta: could not read buckets: %v\n", err)
-	}
-	new_back_buckets, err := bctl.ReadBucketsMetaNolock(bback_names)
-	if err != nil {
-		log.Printf("read-all-buckets-meta: could not read back buckets: %v\n", err)
-	}
-
-	stat, err := bctl.e.Stat()
-	if err != nil {
-		return err
-	}
-
-	bctl.Lock()
-	if new_buckets != nil {
-		bctl.Bucket = new_buckets
-	}
-
-	if new_back_buckets != nil {
-		bctl.BackBucket = new_back_buckets
-	}
-
-	err = bctl.BucketStatUpdateNolock(stat)
-	bctl.Unlock()
-
-	return err
-}
-
 func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path string) (bctl *BucketCtl, err error) {
 	bctl = &BucketCtl {
 		e:			ell,
@@ -955,7 +916,6 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 	if err != nil {
 		return
 	}
-	bctl.ReadAllBucketsMeta()
 
 	signal.Notify(bctl.signals, syscall.SIGHUP)
 
@@ -981,7 +941,7 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 		for {
 			select {
 			case <-bctl.BucketTimer.C:
-				bctl.ReadAllBucketsMeta()
+				bctl.ReadConfig()
 
 				if bctl.Conf.Proxy.BucketUpdateInterval > 0 {
 					bctl.RLock()
@@ -999,9 +959,12 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 				}
 
 			case <-bctl.signals:
+				// reread config and clean back/read-only bucket list
 				bctl.ReadConfig()
-				bctl.ReadAllBucketsMeta()
-				bctl.BucketStatUpdate()
+
+				bctl.Lock()
+				bctl.BackBucket = make([]*Bucket, 0, 10)
+				bctl.Unlock()
 			}
 		}
 	}()
