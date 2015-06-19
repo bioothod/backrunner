@@ -3,7 +3,7 @@ FROM ubuntu:trusty
 RUN	echo "deb http://repo.reverbrain.com/trusty/ current/amd64/" > /etc/apt/sources.list.d/reverbrain.list && \
 	echo "deb http://repo.reverbrain.com/trusty/ current/all/" >> /etc/apt/sources.list.d/reverbrain.list && \
 	apt-get install -y curl tzdata && \
-	cp -f /usr/share/zoneinfo/posix/W-SU /etc/localtime \
+	cp -f /usr/share/zoneinfo/posix/W-SU /etc/localtime && \
 	curl http://repo.reverbrain.com/REVERBRAIN.GPG | apt-key add - && \
 	apt-get update && \
 	apt-get upgrade -y && \
