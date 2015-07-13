@@ -107,7 +107,10 @@ type EllipticsClientConfig struct {
 }
 
 type ProxyClientConfig struct {
+	// address to listen for incomming connections
+	// if it is empty, TLS connections can still be accepted (see below @HTTPSAddress parameter)
 	Address string				`json:"address"`
+
 	// http connection timeout in seconds
 	IdleTimeout int				`json:"idle-timeout"`
 
@@ -163,6 +166,17 @@ type ProxyClientConfig struct {
 	// will return @Root/crossdomain.xml file
 	// directory listing is not supported
 	Root string				`json:"root"`
+
+	// HTTPS listen address
+	// when specified, there must be also specified CertFile and KeyFile parameters
+	// when set, server will listen on this address for incomming TLS connections
+	HTTPSAddress string			`json:"https_address"`
+
+	// certificate file for HTTPS server
+	CertFile string				`json:"cert_file"`
+
+	// Key file for HTTPS server
+	KeyFile string				`json:"key_file"`
 }
 
 type ProxyConfig struct {

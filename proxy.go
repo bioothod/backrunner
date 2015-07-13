@@ -727,7 +727,24 @@ func main() {
 		log.Fatalf("Could not process buckets file '%s': %v", *buckets, err)
 	}
 
-	server := proxy.getTimeoutServer(proxy.bctl.Conf.Proxy.Address, http.HandlerFunc(generic_handler))
+	if len(conf.Proxy.HTTPSAddress) != 0 {
+		if len(conf.Proxy.CertFile) == 0 {
+			log.Fatalf("If you have specified HTTPS address there MUST be certificate file option")
+		}
 
-	log.Fatal(server.ListenAndServe())
+		if len(conf.Proxy.KeyFile) == 0 {
+			log.Fatalf("If you have specified HTTPS address there MUST be key file option")
+		}
+
+		// this is needed to allow both HTTPS and HTTP handlers
+		go func() {
+			server := proxy.getTimeoutServer(proxy.bctl.Conf.Proxy.HTTPSAddress, http.HandlerFunc(generic_handler))
+			log.Fatal(server.ListenAndServeTLS(conf.Proxy.CertFile, conf.Proxy.KeyFile))
+		}()
+	}
+
+	if len(conf.Proxy.Address) != 0 {
+		server := proxy.getTimeoutServer(proxy.bctl.Conf.Proxy.Address, http.HandlerFunc(generic_handler))
+		log.Fatal(server.ListenAndServe())
+	}
 }
