@@ -662,8 +662,8 @@ func (proxy *bproxy) getTimeoutServer(addr string, handler http.Handler) *http.S
 	return &http.Server{
 		Addr:         addr,
 		Handler:      handler,
-		//ReadTimeout:  time.Duration(proxy.bctl.Conf.Proxy.IdleTimeout) * time.Second,
-		//WriteTimeout:  time.Duration(proxy.bctl.Conf.Proxy.IdleTimeout) * time.Second,
+		ReadTimeout:  time.Duration(proxy.bctl.Conf.Proxy.IdleTimeout) * time.Second,
+		WriteTimeout:  time.Duration(proxy.bctl.Conf.Proxy.IdleTimeout) * time.Second,
 	}
 }
 
