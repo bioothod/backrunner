@@ -2,7 +2,6 @@ package etransport
 
 import (
 	"C"
-	"fmt"
 	"github.com/bioothod/elliptics-go/elliptics"
 	"github.com/bioothod/backrunner/config"
 	"io"
@@ -15,8 +14,7 @@ import (
 )
 
 type Elliptics struct {
-	LogFile		io.Writer
-	Log		*log.Logger
+	LogFile		io.WriteCloser
 
 	Node		*elliptics.Node
 	MetadataGroups	[]uint32
@@ -118,7 +116,6 @@ func NewEllipticsTransport(conf *config.ProxyConfig) (e *Elliptics, err error) {
 		log.Fatalf("Could not open log file '%s': %q", conf.Elliptics.LogFile, err)
 	}
 
-	e.Log = log.New(e.LogFile, fmt.Sprintf("elliptics: %s", conf.Elliptics.LogPrefix), log.LstdFlags | log.Lmicroseconds)
 	log.SetPrefix(conf.Elliptics.LogPrefix)
 	log.SetOutput(e.LogFile)
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
