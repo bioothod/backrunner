@@ -845,6 +845,10 @@ func (bctl *BucketCtl) ReadProxyConfig() error {
 	bctl.Conf = conf
 	bctl.Unlock()
 
+	if bctl.e.LogFile != nil {
+		bctl.e.LogFile.Close()
+	}
+
 	bctl.e.LogFile, err = os.OpenFile(conf.Elliptics.LogFile, os.O_RDWR | os.O_APPEND | os.O_CREATE, 0644)
 	if err != nil {
 		log.Fatalf("Could not open log file '%s': %q", conf.Elliptics.LogFile, err)
