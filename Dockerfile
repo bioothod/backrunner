@@ -12,10 +12,12 @@ RUN	echo "deb http://repo.reverbrain.com/trusty/ current/amd64/" > /etc/apt/sour
 RUN 	export PATH=$PATH:/usr/local/go/bin && \
 	export GOPATH=/root/go && \
 	mkdir /root/go && \
-	VERSION=go1.4.2 && \
+	VERSION=go1.5 && \
 	curl -O https://storage.googleapis.com/golang/$VERSION.linux-amd64.tar.gz && \
 	tar -C /usr/local -xf $VERSION.linux-amd64.tar.gz && \
 	rm -f $VERSION.linux-amd64.tar.gz && \
+	git config --global user.email "zbr@ioremap.net" && \
+	git config --global user.name "Evgeniy Polyakov" && \
 	go get github.com/bioothod/elliptics-go/elliptics && \
 	cd /root/go/src/github.com/bioothod/elliptics-go/elliptics && \
 	git checkout master && \
@@ -32,4 +34,4 @@ RUN 	export PATH=$PATH:/usr/local/go/bin && \
 	echo "Backrunner has been updated" ;\
     	rm -rf /var/lib/apt/lists/*
 
-EXPOSE 9090 80
+EXPOSE 9090 80 443
