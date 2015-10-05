@@ -202,6 +202,8 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 
 		pains		[]float64
 		free_rates	[]float64
+
+		abs		[]string
 	}
 
 	stat := make([]*bucket_stat, 0)
@@ -235,6 +237,8 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 				bs.Pain += PainNoStats
 				continue
 			}
+
+			bs.abs = append(bs.abs, st.Ab.String())
 
 			if st.RO {
 				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
@@ -349,8 +353,8 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 	if len(stat) == 0 {
 		str := make([]string, 0)
 		for _, bs := range failed {
-			str = append(str, fmt.Sprintf("{bucket: %s, success-groups: %v, error-groups: %v, groups: %v, pain: %f, free-rates: %v}",
-				bs.Bucket.Name, bs.SuccessGroups, bs.ErrorGroups, bs.Bucket.Meta.Groups, bs.Pain, bs.free_rates))
+			str = append(str, fmt.Sprintf("{bucket: %s, success-groups: %v, error-groups: %v, groups: %v, abs: %v, pain: %f, free-rates: %v}",
+				bs.Bucket.Name, bs.SuccessGroups, bs.ErrorGroups, bs.Bucket.Meta.Groups, bs.abs, bs.Pain, bs.free_rates))
 		}
 
 		log.Printf("find-bucket: url: %s, content-length: %d: there are no suitable buckets: %v",
@@ -381,12 +385,18 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 	}
 
 	str := make([]string, 0)
+	show_num := 0
 	for _, bs := range stat {
-		str = append(str, fmt.Sprintf("{bucket: %s, success-groups: %v, error-groups: %v, groups: %v, pain: %f, free-rates: %v}",
-			bs.Bucket.Name, bs.SuccessGroups, bs.ErrorGroups, bs.Bucket.Meta.Groups, bs.Pain, bs.free_rates))
+		str = append(str, fmt.Sprintf("{bucket: %s, success-groups: %v, error-groups: %v, groups: %v, abs: %v, pain: %f, free-rates: %v}",
+			bs.Bucket.Name, bs.SuccessGroups, bs.ErrorGroups, bs.Bucket.Meta.Groups, bs.abs, bs.Pain, bs.free_rates))
+
+		if show_num >= 5 {
+			break
+		}
 	}
 
-	log.Printf("find-bucket: url: %s, content-length: %d: %v", req.URL.String(), req.ContentLength, str)
+	log.Printf("find-bucket: url: %s, content-length: %d, buckets: %d, showing top %d: %v",
+		req.URL.String(), req.ContentLength, len(stat), len(str), str)
 
 	var sum int64 = 0
 	for {
