@@ -50,6 +50,8 @@ func bmeta_read_upload(ell *etransport.Elliptics, file string) (err error) {
 
 			log.Printf("%s\n", b.Meta.String())
 		}
+	} else {
+		err = fmt.Errorf("There is no 'buckets' section in metadata file, nothing to upload")
 	}
 
 	return
