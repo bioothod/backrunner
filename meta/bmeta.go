@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"encoding/json"
 	"fmt"
 	"github.com/bioothod/backrunner/bucket"
 	"github.com/bioothod/backrunner/config"
@@ -10,18 +11,62 @@ import (
 	"log"
 )
 
+func bmeta_read_upload(ell *etransport.Elliptics, file string) (err error) {
+	metaf, err := ioutil.ReadFile(file)
+	if err != nil {
+		log.Fatalf("Could not read upload bucket config file %s: %v", file, err)
+	}
+
+	var iface interface{}
+	err = json.Unmarshal(metaf, &iface)
+	if err != nil {
+		err = fmt.Errorf("could not parse data: %v", err)
+		return
+	}
+
+	generic := bucket.NewBucketMsgpack("generic")
+
+	imap := iface.(map[string]interface{})
+
+	if g, ok := imap["generic"]; ok {
+		generic.ExtractJson(g)
+	}
+
+	if biface, ok := imap["buckets"]; ok {
+		bmap := biface.(map[string]interface{})
+		for bname, iface := range bmap {
+			log.Printf("bucket: %s, iface: %p\n", bname, iface)
+
+			tmp := bucket.NewBucketMsgpack(bname)
+			*tmp = *generic
+			tmp.Name = bname
+
+			tmp.ExtractJson(iface)
+
+			b, err := bucket.WriteBucket(ell, tmp)
+			if err != nil {
+				log.Printf("Could not write bucket %s: %v", bname, err)
+			}
+
+			log.Printf("%s\n", b.Meta.String())
+		}
+	}
+
+	return
+}
+
 func main() {
-	bname := flag.String("bucket", "", "bucket name to read or upload")
+	bname := flag.String("bucket", "", "bucket name to read")
 	config_file := flag.String("config", "", "transport config file")
 	upload := flag.String("upload", "", "bucket json file to upload/rewrite")
 	flag.Parse()
 
-	if *bname == "" {
-		log.Fatal("there is no bucket")
+	if *bname == "" && *upload == "" {
+		log.Fatal("You must specify either bucket name to read of upload file with buckets")
 	}
 
 	if *config_file == "" {
-		log.Fatal("You must specify config file")
+		log.Fatal("You must specify Elliptics config file")
 	}
 
 	cnf := &config.ProxyConfig{}
@@ -38,26 +83,16 @@ func main() {
 	var b *bucket.Bucket
 
 	if *upload != "" {
-		meta, err := ioutil.ReadFile(*upload)
+		err = bmeta_read_upload(ell, *upload)
 		if err != nil {
-			log.Fatalf("Could not read bucket file %s: %v", *upload, err)
-		}
-		b, err = bucket.WriteBucketJson(ell, *bname, meta)
-		if err != nil {
-			log.Fatalf("Could not write bucket %s: %v", *bname, err)
+			log.Fatalf("Could not write some buckets: %v", err)
 		}
 	} else {
 		b, err = bucket.ReadBucket(ell, *bname)
 		if err != nil {
 			log.Fatalf("Could not read bucket %s: %v", *bname, err)
 		}
-	}
 
-	var acls []string
-	for _, acl := range b.Meta.Acl {
-		acls = append(acls, fmt.Sprintf("%s:%s:0x%x", acl.User, acl.Token, acl.Flags))
+		log.Printf("%s\n", b.Meta.String())
 	}
-
-	log.Printf("%s: version: %d, groups: %v, flags: 0x%x, max-size: %d, max-key-num: %d, acls: %v",
-		b.Meta.Name, b.Meta.Version, b.Meta.Groups, b.Meta.Flags, b.Meta.MaxSize, b.Meta.MaxKeyNum, acls)
 }

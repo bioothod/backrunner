@@ -2,7 +2,6 @@ package bucket
 
 import (
 	"bytes"
-	"encoding/json"
 	"encoding/hex"
 	"github.com/bioothod/backrunner/auth"
 	"github.com/bioothod/backrunner/errors"
@@ -57,9 +56,23 @@ type BucketMsgpack struct {
 	reserved    [3]uint64			`json:"-"`
 }
 
+func NewBucketMsgpack(name string) *BucketMsgpack {
+	return &BucketMsgpack {
+		Version:	1,
+		Name:		name,
+		Groups:		make([]uint32, 0),
+		Acl:		make(map[string]BucketACL),
+	}
+}
+
 func (meta *BucketMsgpack) String() string {
-	return fmt.Sprintf("%s: groups: %v, acl: %v, flags: 0x%x, max-size: %d, max-key-num: %d",
-		meta.Name, meta.Groups, meta.Acl, meta.Flags, meta.MaxSize, meta.MaxKeyNum)
+	var acls []string
+	for _, acl := range meta.Acl {
+		acls = append(acls, fmt.Sprintf("%s:%s:0x%x", acl.User, acl.Token, acl.Flags))
+	}
+
+	return fmt.Sprintf("%s: version: %d, groups: %v, acl: %v, flags: 0x%x, max-size: %d, max-key-num: %d",
+		meta.Name, meta.Version, meta.Groups, acls, meta.Flags, meta.MaxSize, meta.MaxKeyNum)
 }
 
 func (meta *BucketMsgpack) PackMsgpack() (interface{}, error) {
@@ -390,58 +403,55 @@ func WriteBucket(ell *etransport.Elliptics, meta *BucketMsgpack) (bucket *Bucket
 	return
 }
 
-func WriteBucketJson(ell *etransport.Elliptics, name string, data []byte) (bucket *Bucket, err error) {
-	meta := BucketMsgpack {
-		Version:	1,
-		Name:		name,
-		Acl:		make(map[string]BucketACL),
-	}
-
-	// this can not create ACL map from array
-	err = json.Unmarshal(data, &meta)
-	if err != nil {
-		err = fmt.Errorf("could not parse data: %v", err)
-		return
-	}
-
-	var iface interface{}
-	err = json.Unmarshal(data, &iface)
-	if err != nil {
-		err = fmt.Errorf("could not parse data: %v", err)
-		return
-	}
-
+func (meta *BucketMsgpack) ExtractJson(iface interface{}) (err error) {
 	imap := iface.(map[string]interface{})
 
-	log.Printf("acl: %v\n", imap["acl"])
-
-	for _, i := range imap["acl"].([]interface{}) {
-		acl := BucketACL {
-			Version: 2,
-		}
-
-		x := i.(map[string]interface{})
-		if v, ok := x["user"].(string); ok {
-			acl.User = v
-		} else {
-			err = fmt.Errorf("acl: could not find user")
-			return
-		}
-		if v, ok := x["token"].(string); ok {
-			acl.Token = v
-		} else {
-			err = fmt.Errorf("acl: could not find token")
-			return
-		}
-		if v, ok := x["flags"].(float64); ok {
-			acl.Flags = uint64(v)
-		} else {
-			err = fmt.Errorf("acl: could not find flags")
-			return
-		}
-
-		meta.Acl[acl.User] = acl
+	if tmp, ok := imap["flags"].(float64); ok {
+		meta.Flags = uint64(tmp)
+	}
+	if tmp, ok := imap["max-size"].(float64); ok {
+		meta.MaxSize = uint64(tmp)
+	}
+	if tmp, ok := imap["max-key-num"].(float64); ok {
+		meta.MaxKeyNum = uint64(tmp)
 	}
 
-	return WriteBucket(ell, &meta)
+	if groups, ok := imap["groups"]; ok {
+		for _, g := range groups.([]interface{}) {
+			meta.Groups = append(meta.Groups, uint32(g.(float64)))
+		}
+	}
+
+	if acls, ok := imap["acl"]; ok {
+		for _, i := range acls.([]interface{}) {
+			acl := BucketACL {
+				Version: 2,
+			}
+
+			x := i.(map[string]interface{})
+			if v, ok := x["user"].(string); ok {
+				acl.User = v
+			} else {
+				err = fmt.Errorf("acl: could not find user")
+				return
+			}
+			if v, ok := x["token"].(string); ok {
+				acl.Token = v
+			} else {
+				err = fmt.Errorf("acl: could not find token")
+				return
+			}
+			if v, ok := x["flags"].(float64); ok {
+				acl.Flags = uint64(v)
+			} else {
+				err = fmt.Errorf("acl: could not find flags")
+				return err
+			}
+
+			meta.Acl[acl.User] = acl
+		}
+	}
+
+	return err
 }
+

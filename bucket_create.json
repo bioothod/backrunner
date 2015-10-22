@@ -1,18 +1,26 @@
 {
-	"groups": [1,2],
-	"acl": [
-		{
-			"user": "*",
-			"token": "secure unused wildcard token",
-			"flags": 7
-		},
-		{
-			"user": "writer",
-			"token": "secure token",
-			"flags": 7
-		}
-	],
-	"flags": 0,
-	"max-size": 0,
-	"max-key-num": 0
+	"generic": {
+		"acl": [
+			{
+				"user": "*",
+				"token": "secure unused wildcard token",
+				"flags": 1
+			},
+			{
+				"user": "writer",
+				"token": "secure token",
+				"flags": 2
+			}
+		],
+		"flags": 0,
+		"max-size": 0,
+		"max-key-num": 0
+	},
+	"buckets": {
+		"b1": { "groups": [1,2] },
+		"b2": { "groups": [1,2] },
+		"b3": { "groups": [1,2] },
+		"b4": { "groups": [1,2] },
+		"b5": { "groups": [1,2] }
+	}
 }
