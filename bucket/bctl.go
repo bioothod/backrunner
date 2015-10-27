@@ -1,12 +1,14 @@
 package bucket
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"github.com/bioothod/backrunner/config"
 	"github.com/bioothod/backrunner/errors"
 	"github.com/bioothod/backrunner/etransport"
 	"github.com/bioothod/backrunner/reply"
 	"github.com/bioothod/elliptics-go/elliptics"
-	"fmt"
 	"io/ioutil"
 	"log"
 	//"math"
@@ -873,16 +875,82 @@ func (bctl *BucketCtl) ReadProxyConfig() error {
 
 }
 
-func (bctl *BucketCtl) ReadConfig() error {
-	err := bctl.ReadBucketConfig()
+func (bctl *BucketCtl) UpdateMetadata(key string, jsi interface{}) (err error) {
+	ms, err := bctl.e.MetadataSession()
 	if err != nil {
-		return fmt.Errorf("failed to update bucket config: %v", err)
+		log.Printf("%s: metadata update: could not create metadata session: %v", key, err)
+		return
+	}
+	defer ms.Delete()
+
+	ms.SetNamespace(BucketNamespace)
+
+	type Meta struct {
+		Key string
+		Timestamp int64
+	}
+
+	js := struct {
+		Meta Meta
+		Data interface{}
+	} {
+		Meta {
+			key,
+			time.Now().Unix(),
+		},
+		jsi,
+	}
+
+	data, err := json.MarshalIndent(&js, "", "  ")
+	if err != nil {
+		log.Printf("%s: metadata update: could not pack json: %v: %v", key, js, err)
+		return
+	}
+
+	for wr := range ms.WriteData(key, bytes.NewReader(data), 0, 0) {
+		if wr.Error() != nil {
+			err = wr.Error()
+
+			log.Printf("%s: metadata update: could not write data: %v", key, err)
+		}
+	}
+
+	return
+}
+
+func (bctl *BucketCtl) ReadConfig() (err error) {
+	err = bctl.ReadBucketConfig()
+	if err != nil {
+		err = fmt.Errorf("read-config: failed to update bucket config: %v", err)
+		log.Printf("%s", err)
+		return
 	}
 
 	err = bctl.ReadProxyConfig()
 	if err != nil {
-		return fmt.Errorf("failed to update proxy config: %v", err)
+		err = fmt.Errorf("read-config: failed to update proxy config: %v", err)
+		log.Printf("%s", err)
+		return
 	}
+
+	hostname, err := os.Hostname()
+	if err != nil {
+		err = fmt.Errorf("read-config: hostname error: %v", err)
+		log.Printf("%s", err)
+		return
+	}
+
+	cfg := struct {
+		BucketNum	int
+		Hostname	string
+		ProxyConfig	*config.ProxyConfig
+	} {
+		BucketNum:	len(bctl.Bucket),
+		Hostname:	hostname,
+		ProxyConfig:	bctl.Conf,
+	}
+
+	bctl.UpdateMetadata(fmt.Sprintf("%s.ReadConfig", hostname), &cfg)
 
 	return nil
 }
