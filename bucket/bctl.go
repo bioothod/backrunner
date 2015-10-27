@@ -167,9 +167,6 @@ func (bctl *BucketCtl) BucketStatUpdate() (err error) {
 	err = bctl.BucketStatUpdateNolock(stat)
 	bctl.Unlock()
 
-	// run defragmentation scan
-	bctl.ScanBuckets()
-
 	return err
 }
 
@@ -1048,6 +1045,15 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 				bctl.BackBucket = make([]*Bucket, 0, 10)
 				bctl.Unlock()
 			}
+		}
+	}()
+
+	go func() {
+		for {
+			// run defragmentation scan
+			bctl.ScanBuckets()
+
+			time.Sleep(31 * time.Second)
 		}
 	}()
 
