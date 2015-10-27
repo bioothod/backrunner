@@ -38,6 +38,7 @@ RUN	git config --global user.email "zbr@ioremap.net" && \
 	git checkout master && \
 	git pull && \
 	git branch -v && \
+	make && \
 	go install && \
 	echo "Backrunner has been updated" ;\
     	rm -rf /var/lib/apt/lists/*

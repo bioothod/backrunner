@@ -6,6 +6,12 @@ import (
 	"io/ioutil"
 )
 
+var (
+	BuildDate	string
+	LastCommit	string
+	EllipticsGoLastCommit	string
+)
+
 type Formatter struct {
 	Type string				`json:"type"`
 	Pattern string				`json:"pattern"`

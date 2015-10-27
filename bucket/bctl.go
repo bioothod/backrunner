@@ -947,12 +947,18 @@ func (bctl *BucketCtl) ReadConfig() (err error) {
 		Hostname	string
 		ConfigUpdateInterval	int
 		StatUpdateInterval	int
+		BuildDate	string
+		LastCommit	string
+		EllipticsGoLastCommit	string
 	} {
-		StartTime:	bctl.StartTime.Unix(),
-		BucketNum:	len(bctl.Bucket),
-		Hostname:	hostname,
+		StartTime:		bctl.StartTime.Unix(),
+		BucketNum:		len(bctl.Bucket),
+		Hostname:		hostname,
 		ConfigUpdateInterval:	bctl.Conf.Proxy.BucketUpdateInterval,
 		StatUpdateInterval:	bctl.Conf.Proxy.BucketStatUpdateInterval,
+		BuildDate:		config.BuildDate,
+		LastCommit:		config.LastCommit,
+		EllipticsGoLastCommit:	config.EllipticsGoLastCommit,
 	}
 
 	bctl.UpdateMetadata(fmt.Sprintf("%s.ReadConfig", hostname), &cfg)
