@@ -89,7 +89,11 @@ type BucketCtl struct {
 	BucketTimer		*time.Timer
 	BucketStatTimer		*time.Timer
 
+	// time when previous statistics update has been performed
 	StatTime		time.Time
+
+	// time when backrunner proxy started
+	StartTime		time.Time
 
 	// time when previous defragmentation scan was performed
 	DefragTime		time.Time
@@ -938,13 +942,17 @@ func (bctl *BucketCtl) ReadConfig() (err error) {
 	}
 
 	cfg := struct {
+		StartTime	int64
 		BucketNum	int
 		Hostname	string
-		ProxyConfig	*config.ProxyConfig
+		ConfigUpdateInterval	int
+		StatUpdateInterval	int
 	} {
+		StartTime:	bctl.StartTime.Unix(),
 		BucketNum:	len(bctl.Bucket),
 		Hostname:	hostname,
-		ProxyConfig:	bctl.Conf,
+		ConfigUpdateInterval:	bctl.Conf.Proxy.BucketUpdateInterval,
+		StatUpdateInterval:	bctl.Conf.Proxy.BucketStatUpdateInterval,
 	}
 
 	bctl.UpdateMetadata(fmt.Sprintf("%s.ReadConfig", hostname), &cfg)
@@ -987,6 +995,7 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 		BucketStatTimer:	time.NewTimer(time.Second * 10),
 
 		DefragTime:		time.Now(),
+		StartTime:		time.Now(),
 	}
 
 	runtime.SetBlockProfileRate(1000)
