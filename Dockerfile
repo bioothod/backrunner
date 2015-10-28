@@ -7,7 +7,7 @@ RUN	echo "deb http://repo.reverbrain.com/trusty/ current/amd64/" > /etc/apt/sour
 	curl http://repo.reverbrain.com/REVERBRAIN.GPG | apt-key add - && \
 	apt-get update && \
 	apt-get upgrade -y && \
-	apt-get install -y git elliptics-client elliptics-dev g++
+	apt-get install -y git elliptics-client elliptics-dev g++ make
 
 RUN 	VERSION=go1.5.1 && \
 	curl -O https://storage.googleapis.com/golang/$VERSION.linux-amd64.tar.gz && \
