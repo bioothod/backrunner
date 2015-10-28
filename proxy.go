@@ -494,15 +494,10 @@ func proxy_stat_handler(w http.ResponseWriter, req *http.Request, strings ...str
 		}
 
 		for k, v := range c.RPS {
-			if v != 0 {
-				m.RPS[fmt.Sprintf("%d", k)] = v
-			}
+			m.RPS[fmt.Sprintf("%d", k)] = v
 		}
 
-		// skip rps/bps entries without useful data
-		if len(m.RPS) != 0 {
-			res.Handlers[name] = m
-		}
+		res.Handlers[name] = m
 	}
 
 	reply_json, err := json.Marshal(&res)
