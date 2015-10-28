@@ -20,16 +20,32 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
+
+const last_errors_length int = 128
 
 var (
 	proxy bproxy
 )
 
+type ErrorInfo struct {
+	Tsec		int64
+	Tnsec		int
+	Method		string
+	RemoteAddr	string
+	URL		string
+	Error		string
+	Status		int
+}
+
 type bproxy struct {
 	bctl		*bucket.BucketCtl
 	ell		*etransport.Elliptics
+
+	error_index	uint64
+	last_errors	[]ErrorInfo
 }
 
 type Reply struct {
@@ -50,6 +66,21 @@ func GoodReplyLength(length uint64) Reply {
 		err: nil,
 		status: http.StatusOK,
 		length: length,
+	}
+}
+
+func (p *bproxy) add_error(method, addr, url string, status int, err string) {
+	idx := (atomic.AddUint64(&p.error_index, 1) - 1) % uint64(len(p.last_errors))
+	t := time.Now()
+	p.last_errors[idx] = ErrorInfo {
+		Tsec:		t.Unix(),
+		Tnsec:		t.Nanosecond(),
+
+		Method:		method,
+		RemoteAddr:	addr,
+		URL:		url,
+		Error:		err,
+		Status:		status,
 	}
 }
 
@@ -425,15 +456,34 @@ type Metric struct {
 
 type proxy_stat_reply struct {
 	Handlers	map[string]Metric	`json:"handlers"`
+	Errors		[]ErrorInfo
 }
 
 // this uglymoron is needed to prevent Golang initialization loop logic from exploding
 var estimator_scan_handlers map[string]*handler
 
 func proxy_stat_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
-	res := proxy_stat_reply {
-		Handlers: make(map[string]Metric),
+	start_idx := proxy.error_index
+	l := uint64(len(proxy.last_errors))
+	if start_idx < uint64(len(proxy.last_errors)) {
+		l = start_idx
 	}
+
+	res := proxy_stat_reply {
+		Handlers:	make(map[string]Metric),
+		Errors:		make([]ErrorInfo, l),
+	}
+
+	if start_idx <= uint64(len(proxy.last_errors)) {
+		copy(res.Errors, proxy.last_errors)
+	} else {
+		var i uint64
+		for i = 0; i < uint64(len(proxy.last_errors)); i++ {
+			idx := (i + start_idx + 1) % uint64(len(proxy.last_errors))
+			res.Errors[i] = proxy.last_errors[idx]
+		}
+	}
+
 
 	for name, h := range estimator_scan_handlers {
 		c := h.e.Read()
@@ -635,6 +685,7 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 	msg := "OK"
 	if reply.err != nil {
 		msg = reply.err.Error()
+		proxy.add_error(req.Method, req.RemoteAddr, req.URL.RequestURI(), reply.status, msg)
 	}
 
 	if content_length == 0 {
@@ -718,6 +769,8 @@ func main() {
 		log.Printf("redirect is not allowed because of invalid redirect port %d",
 			conf.Proxy.RedirectPort)
 	}
+
+	proxy.last_errors = make([]ErrorInfo, last_errors_length, last_errors_length)
 
 	proxy.ell, err = etransport.NewEllipticsTransport(conf)
 	if err != nil {
