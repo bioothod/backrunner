@@ -29,6 +29,11 @@
 		"defrag-removed-space-limit": 0.1,
 		"defrag-max-buckets": 3,
 		"defrag-max-backends-per-server": 2,
-		"root": "/mnt/disk/elliptics/root"
+		"root": "/mnt/disk/elliptics/root",
+		"content-types": {
+			"flv" : "video/x-flv",
+			"mp4" : "video/mp4",
+			"mp3" : "audio/mpeg"
+		}
 	}
 }
