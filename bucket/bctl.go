@@ -611,6 +611,18 @@ func (bctl *BucketCtl) Get(bname, key string, req *http.Request) (resp []byte, e
 	return
 }
 
+func (bctl *BucketCtl) SetContentType(key string, w http.ResponseWriter) {
+	for k, v := range bctl.Conf.Proxy.ContentTypes {
+		if strings.HasSuffix(key, k) {
+			w.Header().Set("Content-Type", v)
+			return
+		}
+	}
+
+	return
+}
+
+
 func (bctl *BucketCtl) Stream(bname, key string, w http.ResponseWriter, req *http.Request) (err error) {
 	bucket, err := bctl.FindBucket(bname)
 	if err != nil {
@@ -625,6 +637,7 @@ func (bctl *BucketCtl) Stream(bname, key string, w http.ResponseWriter, req *htt
 		return
 	}
 
+	bctl.SetContentType(key, w)
 
 	s, err := bctl.e.DataSession(req)
 	if err != nil {

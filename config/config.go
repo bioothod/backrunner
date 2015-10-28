@@ -183,6 +183,8 @@ type ProxyClientConfig struct {
 
 	// Key file for HTTPS server
 	KeyFile string				`json:"key_file"`
+
+	ContentTypes map[string]string		`json:"content-types"`
 }
 
 type ProxyConfig struct {
