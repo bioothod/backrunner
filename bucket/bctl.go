@@ -612,6 +612,9 @@ func (bctl *BucketCtl) Get(bname, key string, req *http.Request) (resp []byte, e
 }
 
 func (bctl *BucketCtl) SetContentType(key string, w http.ResponseWriter) {
+	bctl.RLock()
+	defer bctl.RUnlock()
+
 	for k, v := range bctl.Conf.Proxy.ContentTypes {
 		if strings.HasSuffix(key, k) {
 			w.Header().Set("Content-Type", v)
