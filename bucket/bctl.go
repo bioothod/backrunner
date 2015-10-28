@@ -977,7 +977,11 @@ func (bctl *BucketCtl) ReadConfig() (err error) {
 		EllipticsGoLastCommit:	config.EllipticsGoLastCommit,
 	}
 
-	bctl.UpdateMetadata(fmt.Sprintf("%s.ReadConfig", hostname), &cfg)
+	err = bctl.UpdateMetadata(fmt.Sprintf("%s.ReadConfig", hostname), &cfg)
+	if err == nil {
+		log.Printf("read-config: updated metadata: hostname: %s, build-data: %s, last-commit: %s, elliptics-go-last-commit: %s\n",
+			hostname, config.BuildDate, config.LastCommit, config.EllipticsGoLastCommit)
+	}
 
 	return nil
 }
