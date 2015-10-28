@@ -46,9 +46,9 @@ func bmeta_read_upload(ell *etransport.Elliptics, file string) (err error) {
 			b, err := bucket.WriteBucket(ell, tmp)
 			if err != nil {
 				log.Printf("Could not write bucket %s: %v", bname, err)
+			} else {
+				log.Printf("%s\n", b.Meta.String())
 			}
-
-			log.Printf("%s\n", b.Meta.String())
 		}
 	} else {
 		err = fmt.Errorf("There is no 'buckets' section in metadata file, nothing to upload")
