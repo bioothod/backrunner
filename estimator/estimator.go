@@ -65,6 +65,8 @@ func (e *Estimator) PushNolock(size uint64, status int) {
 
 	rs.RPS = MovingExpAvg(1.0, rs.RPS, fdelta, ftime)
 	rs.BPS = MovingExpAvg(float64(size), rs.BPS, fdelta, ftime)
+
+	rs.UpdateTime = time.Now()
 }
 
 func (e *Estimator) Push(size uint64, status int) {
