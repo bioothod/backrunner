@@ -1,75 +1,47 @@
 package estimator
 
 import (
+	"math"
+	"strconv"
 	"sync"
 	"time"
 )
 
-const EstimatorInterval time.Duration = 5 * time.Second
+const ftime float64 = 5.0 // 5 second avg
 
-type Stat struct {
-	UpdateTime	time.Time
-	BPS		uint64
-	RPS		map[int]uint64
+func MovingExpAvg(value, oldValue, fdtime, ftime float64) float64 {
+	alpha := 1.0 - math.Exp(-fdtime/ftime)
+	r := alpha * value + (1.0 - alpha) * oldValue
+	return r
 }
 
-func (src *Stat) CopyInto(dst *Stat) {
-	dst.UpdateTime = src.UpdateTime
+type RequestStat struct {
+	UpdateTime	time.Time		`json:"-"`
+	BPS		float64
+	RPS		float64
+}
 
-	dst.BPS = src.BPS
-	for k, v := range src.RPS {
-		dst.RPS[k] = v
+func NewRequestStat() *RequestStat {
+	return &RequestStat {
+		UpdateTime:	time.Now(),
+		BPS:		0,
+		RPS:		0,
 	}
 }
-
-func (s *Stat) Clear() {
-	s.BPS = 0
-	s.UpdateTime = time.Now().Add(EstimatorInterval)
-	s.RPS = make(map[int]uint64)
-}
-
-func (s *Stat) Adjust(tm time.Time) {
-	d := tm.Sub(s.UpdateTime).Seconds() + EstimatorInterval.Seconds()
-	s.BPS = uint64(float64(s.BPS) / d)
-	for k, v := range s.RPS {
-		s.RPS[k] = uint64(float64(v) / d)
-	}
-}
-
 
 type Estimator struct {
 	sync.RWMutex
 
-
-	Cache		Stat
-	Current		Stat
+	RS		map[int]*RequestStat
 }
 
 func NewEstimator() *Estimator {
-	e := &Estimator {
-	}
-
-	e.Cache.Clear()
-	e.Current.Clear()
-
-	return e
-}
-
-func (e *Estimator) UpdateCache() {
-	tm := time.Now()
-
-	if tm.After(e.Current.UpdateTime) {
-		e.Current.CopyInto(&e.Cache)
-		e.Cache.Adjust(tm)
-
-		e.Current.Clear()
+	return &Estimator {
+		RS:	make(map[int]*RequestStat),
 	}
 }
 
-func (e *Estimator) Push(size uint64, status int) {
-	e.Lock()
-	defer e.Unlock()
-
+func (e *Estimator) PushNolock(size uint64, status int) {
 	switch {
 	case status >= 200 && status < 300:
 		status = 200
@@ -81,23 +53,44 @@ func (e *Estimator) Push(size uint64, status int) {
 		status = 500
 	}
 
-	e.UpdateCache()
+	fdelta := 1.0 // time passed since last update
 
-	e.Current.RPS[status] += 1
-	if (uint64(size) > 0) {
-		e.Current.BPS += size
+	rs, ok := e.RS[status]
+	if !ok {
+		rs = NewRequestStat()
+		e.RS[status] = rs
+	} else {
+		fdelta = time.Now().Sub(rs.UpdateTime).Seconds()
 	}
+
+	rs.RPS = MovingExpAvg(1.0, rs.RPS, fdelta, ftime)
+	rs.BPS = MovingExpAvg(float64(size), rs.BPS, fdelta, ftime)
 }
 
-func (e *Estimator) Read() *Stat {
-	e.RLock()
-	defer e.RUnlock()
+func (e *Estimator) Push(size uint64, status int) {
+	e.Lock()
+	defer e.Unlock()
 
-	e.UpdateCache()
+	e.PushNolock(size, status)
+}
 
-	res := &Stat {}
-	res.Clear()
 
-	e.Cache.CopyInto(res)
+func (e *Estimator) Copy() (map[string]RequestStat) {
+	e.Lock()
+	defer e.Unlock()
+
+	res := make(map[string]RequestStat)
+	for k, v := range e.RS {
+		fdelta := time.Now().Sub(v.UpdateTime).Seconds()
+		if fdelta > 1.0 {
+			v.RPS = MovingExpAvg(0, v.RPS, fdelta, ftime)
+			v.BPS = MovingExpAvg(0, v.BPS, fdelta, ftime)
+		}
+
+		if v.RPS > 0.1 {
+			res[strconv.Itoa(k)] = *v
+		}
+	}
+
 	return res
 }

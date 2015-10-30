@@ -450,8 +450,7 @@ func stat_handler(w http.ResponseWriter, req *http.Request, strings ...string) R
 }
 
 type Metric struct {
-	BPS		uint64			`json:"bps"`
-	RPS		map[string]uint64	`json:"rps"`
+	RS		map[string]estimator.RequestStat
 }
 
 type proxy_stat_reply struct {
@@ -486,15 +485,8 @@ func proxy_stat_handler(w http.ResponseWriter, req *http.Request, strings ...str
 
 
 	for name, h := range estimator_scan_handlers {
-		c := h.e.Read()
-
 		m := Metric {
-			BPS:		c.BPS,
-			RPS:		make(map[string]uint64),
-		}
-
-		for k, v := range c.RPS {
-			m.RPS[fmt.Sprintf("%d", k)] = v
+			RS: h.e.Copy(),
 		}
 
 		res.Handlers[name] = m
