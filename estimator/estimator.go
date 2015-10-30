@@ -84,7 +84,7 @@ func (e *Estimator) Copy() (map[string]RequestStat) {
 	res := make(map[string]RequestStat)
 	for k, v := range e.RS {
 		fdelta := time.Now().Sub(v.UpdateTime).Seconds()
-		if fdelta > 1.0 {
+		if fdelta > ftime {
 			v.RPS = MovingExpAvg(0, v.RPS, fdelta, ftime)
 			v.BPS = MovingExpAvg(0, v.BPS, fdelta, ftime)
 		}
