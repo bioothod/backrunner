@@ -87,6 +87,7 @@ func (e *Estimator) Copy() (map[string]RequestStat) {
 		if fdelta > ftime {
 			v.RPS = MovingExpAvg(0, v.RPS, fdelta, ftime)
 			v.BPS = MovingExpAvg(0, v.BPS, fdelta, ftime)
+			v.UpdateTime = time.Now()
 		}
 
 		if v.RPS > 0.1 {
