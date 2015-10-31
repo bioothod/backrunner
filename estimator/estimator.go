@@ -49,7 +49,7 @@ func (r *RequestStat) Copy(start int) {
 }
 
 type Estimator struct {
-	sync.RWMutex
+	sync.Mutex
 
 	RS		map[int]*RequestStat
 }
