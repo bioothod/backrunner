@@ -474,6 +474,7 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.Meta.Groups)
 	s.SetTimeout(100)
+	s.SetIOflags(elliptics.IOflag(bctl.Conf.Proxy.WriterIOFlags))
 
 	log.Printf("upload-trace-id: %x: url: %s, bucket: %s, key: %s, id: %s\n",
 		s.GetTraceID(), req.URL.String(), bucket.Name, key, s.Transform(key))
@@ -587,6 +588,7 @@ func (bctl *BucketCtl) Get(bname, key string, req *http.Request) (resp []byte, e
 
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.Meta.Groups)
+	s.SetIOflags(elliptics.IOflag(bctl.Conf.Proxy.ReaderIOFlags))
 
 	log.Printf("get-trace-id: %x: url: %s, bucket: %s, key: %s, id: %s\n",
 		s.GetTraceID(), req.URL.String(), bucket.Name, key, s.Transform(key))
@@ -652,6 +654,7 @@ func (bctl *BucketCtl) Stream(bname, key string, w http.ResponseWriter, req *htt
 
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.Meta.Groups)
+	s.SetIOflags(elliptics.IOflag(bctl.Conf.Proxy.ReaderIOFlags))
 
 	log.Printf("stream-trace-id: %x: url: %s, bucket: %s, key: %s, id: %s\n",
 		s.GetTraceID(), req.URL.String(), bucket.Name, key, s.Transform(key))
@@ -697,6 +700,7 @@ func (bctl *BucketCtl) Lookup(bname, key string, req *http.Request) (reply *repl
 
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.Meta.Groups)
+	s.SetIOflags(elliptics.IOflag(bctl.Conf.Proxy.ReaderIOFlags))
 
 	log.Printf("lookup-trace-id: %x: url: %s, bucket: %s, key: %s, id: %s\n",
 		s.GetTraceID(), req.URL.String(), bucket.Name, key, s.Transform(key))
@@ -730,6 +734,7 @@ func (bctl *BucketCtl) Delete(bname, key string, req *http.Request) (err error) 
 
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.Meta.Groups)
+	s.SetIOflags(elliptics.IOflag(bctl.Conf.Proxy.WriterIOFlags))
 
 	log.Printf("delete-trace-id: %x: url: %s, bucket: %s, key: %s, id: %s\n",
 		s.GetTraceID(), req.URL.String(), bucket.Name, key, s.Transform(key))
@@ -768,6 +773,7 @@ func (bctl *BucketCtl) BulkDelete(bname string, keys []string, req *http.Request
 
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.Meta.Groups)
+	s.SetIOflags(elliptics.IOflag(bctl.Conf.Proxy.WriterIOFlags))
 
 	log.Printf("bulk-delete-trace-id: %x: url: %s, bucket: %s, keys: %v\n",
 		s.GetTraceID(), req.URL.String(), bucket.Name, keys)
