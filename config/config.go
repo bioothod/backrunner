@@ -185,6 +185,10 @@ type ProxyClientConfig struct {
 	KeyFile string				`json:"key_file"`
 
 	ContentTypes map[string]string		`json:"content-types"`
+
+	// Reader/Writer elliptics IO flags
+	ReaderIOFlags uint32			`json:"reader-io-flags"`
+	WriterIOFlags uint32			`json:"writer-io-flags"`
 }
 
 type ProxyConfig struct {
