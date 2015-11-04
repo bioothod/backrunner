@@ -34,6 +34,9 @@
 			"flv" : "video/x-flv",
 			"mp4" : "video/mp4",
 			"mp3" : "audio/mpeg"
-		}
+		},
+
+		"reader-io-flags": 256,
+		"writer-io-flags": 0
 	}
 }
