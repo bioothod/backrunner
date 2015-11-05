@@ -33,6 +33,7 @@ var (
 type ErrorInfo struct {
 	Tsec		int64
 	Tnsec		int
+	Time		string
 	Method		string
 	RemoteAddr	string
 	URL		string
@@ -75,6 +76,7 @@ func (p *bproxy) add_error(method, addr, url string, status int, err string) {
 	p.last_errors[idx] = ErrorInfo {
 		Tsec:		t.Unix(),
 		Tnsec:		t.Nanosecond(),
+		Time:		t.String(),
 
 		Method:		method,
 		RemoteAddr:	addr,
