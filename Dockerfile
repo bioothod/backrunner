@@ -1,4 +1,5 @@
 FROM ubuntu:trusty
+#FROM reverbrain/backrunner:1.5.1.0.6
 
 RUN	echo "deb http://repo.reverbrain.com/trusty/ current/amd64/" > /etc/apt/sources.list.d/reverbrain.list && \
 	echo "deb http://repo.reverbrain.com/trusty/ current/all/" >> /etc/apt/sources.list.d/reverbrain.list && \
@@ -25,7 +26,7 @@ RUN	git config --global user.email "zbr@ioremap.net" && \
 	#GOROOT_BOOTSTRAP=/usr/local/go ./all.bash && \
 	#export PATH=$PATH:/root/gosource/bin && \
 	export PATH=$PATH:/usr/local/go/bin && \
-	mkdir /root/go && \
+	mkdir -p /root/go && \
 	export GOPATH=/root/go && \
 	go get github.com/bioothod/elliptics-go/elliptics && \
 	cd /root/go/src/github.com/bioothod/elliptics-go/elliptics && \
