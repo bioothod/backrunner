@@ -13,6 +13,3 @@ all: build
 
 build:
 	go build -o backrunner ${GO_LDFLAGS} proxy.go
-
-build_linux:
-	env GOOS=linux go build -o backrunner ${GO_LDFLAGS} proxy.go
