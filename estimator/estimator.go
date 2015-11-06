@@ -1,6 +1,7 @@
 package estimator
 
 import (
+	"encoding/json"
 	"math"
 	"strconv"
 	"sync"
@@ -100,15 +101,13 @@ func (e *Estimator) Push(size uint64, status int) {
 	e.PushNolock(1, size, status)
 }
 
-
-func (e *Estimator) Copy() (map[string]RequestStat) {
-	e.Lock()
-	defer e.Unlock()
-
+func (e *Estimator) MarshalJSON() ([]byte, error) {
 	second := time.Now().Second()
 	idx := second % EstimatorRange
 
 	res := make(map[string]RequestStat)
+
+	e.Lock()
 	for k, v := range e.RS {
 		e.PushNolock(0, 0, k)
 
@@ -118,6 +117,7 @@ func (e *Estimator) Copy() (map[string]RequestStat) {
 			res[strconv.Itoa(k)] = *v
 		}
 	}
+	e.Unlock()
 
-	return res
+	return json.Marshal(res)
 }
