@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path"
 	"runtime"
 	"runtime/pprof"
 	"strconv"
@@ -1013,6 +1014,21 @@ func (bctl *BucketCtl) ReadBucketsMetaNolock(names []string) (new_buckets []*Buc
 	return
 }
 
+func (bctl *BucketCtl) DumpProfile() {
+	if len(bctl.Conf.Proxy.Root) != 0 {
+		p := path.Join(bctl.Conf.Proxy.Root, ProfilePath)
+		file, err := os.OpenFile(p, os.O_RDWR | os.O_TRUNC | os.O_CREATE, 0644)
+		if err != nil {
+			log.Printf("dump-profile: failed to open profile '%s': %v", p, err)
+			return
+		}
+		defer file.Close()
+
+		fmt.Fprintf(file, "profile dump: %s\n", time.Now().String())
+		pprof.Lookup("block").WriteTo(file, 2)
+	}
+}
+
 func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path string) (bctl *BucketCtl, err error) {
 	bctl = &BucketCtl {
 		e:			ell,
@@ -1041,18 +1057,7 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 
 	go func() {
 		for {
-			if len(bctl.Conf.Proxy.Root) != 0 {
-				file, err := os.OpenFile(bctl.Conf.Proxy.Root + "/" + ProfilePath, os.O_RDWR | os.O_TRUNC | os.O_CREATE, 0644)
-				if err != nil {
-					return
-				}
-
-				fmt.Fprintf(file, "profile dump: %s\n", time.Now().String())
-				pprof.Lookup("block").WriteTo(file, 2)
-
-				file.Close()
-			}
-
+			bctl.DumpProfile()
 			time.Sleep(30 * time.Second)
 		}
 	}()
