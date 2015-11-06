@@ -1014,9 +1014,14 @@ func (bctl *BucketCtl) ReadBucketsMetaNolock(names []string) (new_buckets []*Buc
 	return
 }
 
-func (bctl *BucketCtl) DumpProfile() {
+func (bctl *BucketCtl) DumpProfile(add_time bool) {
 	if len(bctl.Conf.Proxy.Root) != 0 {
-		p := path.Join(bctl.Conf.Proxy.Root, ProfilePath)
+		profile := ProfilePath
+		if add_time {
+			profile += "-" + time.Now().Format("2006.01.02-15:04:05.000")
+		}
+
+		p := path.Join(bctl.Conf.Proxy.Root, profile)
 		file, err := os.OpenFile(p, os.O_RDWR | os.O_TRUNC | os.O_CREATE, 0644)
 		if err != nil {
 			log.Printf("dump-profile: failed to open profile '%s': %v", p, err)
@@ -1057,7 +1062,7 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 
 	go func() {
 		for {
-			bctl.DumpProfile()
+			bctl.DumpProfile(false)
 			time.Sleep(30 * time.Second)
 		}
 	}()
