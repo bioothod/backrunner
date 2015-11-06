@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"runtime"
 	"strconv"
@@ -426,6 +427,12 @@ func common_handler(w http.ResponseWriter, req *http.Request, strings ...string)
 	return GoodReplyLength(uint64(len(data)))
 }
 
+func exit_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
+	proxy.bctl.DumpProfile(true)
+	os.Exit(-1)
+	return GoodReply()
+}
+
 func stat_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
 	reply, err := proxy.bctl.Stat(req)
 	if err != nil {
@@ -566,6 +573,11 @@ var proxy_handlers = map[string]*handler {
 		Params: 0,
 		Methods: []string{"GET"},
 		Function: common_handler,
+	},
+	"exit": &handler{
+		Params:	0,
+		Methods: []string{"GET"},
+		Function: exit_handler,
 	},
 }
 
