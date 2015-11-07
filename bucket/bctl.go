@@ -948,6 +948,9 @@ type BucketCtlStat struct {
 	StatTime	int64
 	StatTimeString	string
 
+	CurrentTime	int64
+	CurrentTimeString	string
+
 	BucketNum	int
 	Hostname	string
 	ConfigUpdateInterval	int
@@ -957,14 +960,12 @@ type BucketCtlStat struct {
 	EllipticsGoLastCommit	string
 }
 
-func (bctl *BucketCtl) NewBucketCtlStat() (*BucketCtlStat, error) {
+func (bctl *BucketCtl) NewBucketCtlStat() (*BucketCtlStat) {
 	hostname, err := os.Hostname()
 	if err != nil {
-		err = fmt.Errorf("read-config: hostname error: %v", err)
-		log.Printf("%s", err)
-		return nil, err
+		log.Printf("new-bucket-ctl: hostname error: %v", err)
+		hostname = ""
 	}
-
 
 	ctl := &BucketCtlStat {
 		StartTime:		bctl.StartTime.Unix(),
@@ -972,6 +973,9 @@ func (bctl *BucketCtl) NewBucketCtlStat() (*BucketCtlStat, error) {
 
 		StatTime:		bctl.StatTime.Unix(),
 		StatTimeString:		bctl.StatTime.String(),
+
+		CurrentTime:		time.Now().Unix(),
+		CurrentTimeString:	time.Now().String(),
 
 		BucketNum:		len(bctl.Bucket),
 		Hostname:		hostname,
@@ -982,7 +986,7 @@ func (bctl *BucketCtl) NewBucketCtlStat() (*BucketCtlStat, error) {
 		EllipticsGoLastCommit:	config.EllipticsGoLastCommit,
 	}
 
-	return ctl, nil
+	return ctl
 }
 
 func (bctl *BucketCtl) ReadConfig() (err error) {
@@ -1000,10 +1004,7 @@ func (bctl *BucketCtl) ReadConfig() (err error) {
 		return
 	}
 
-	ctl, err := bctl.NewBucketCtlStat()
-	if err != nil {
-		return
-	}
+	ctl := bctl.NewBucketCtlStat()
 
 	err = bctl.UpdateMetadata(fmt.Sprintf("%s.ReadConfig", ctl.Hostname), ctl)
 	if err == nil {
