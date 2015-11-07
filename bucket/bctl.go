@@ -941,6 +941,49 @@ func (bctl *BucketCtl) UpdateMetadata(key string, jsi interface{}) (err error) {
 
 	return
 }
+type BucketCtlStat struct {
+	StartTime	int64
+	StartTimeString	string
+
+	StatTime	int64
+	StatTimeString	string
+
+	BucketNum	int
+	Hostname	string
+	ConfigUpdateInterval	int
+	StatUpdateInterval	int
+	BuildDate	string
+	LastCommit	string
+	EllipticsGoLastCommit	string
+}
+
+func (bctl *BucketCtl) NewBucketCtlStat() (*BucketCtlStat, error) {
+	hostname, err := os.Hostname()
+	if err != nil {
+		err = fmt.Errorf("read-config: hostname error: %v", err)
+		log.Printf("%s", err)
+		return nil, err
+	}
+
+
+	ctl := &BucketCtlStat {
+		StartTime:		bctl.StartTime.Unix(),
+		StartTimeString:	bctl.StartTime.String(),
+
+		StatTime:		bctl.StatTime.Unix(),
+		StatTimeString:		bctl.StatTime.String(),
+
+		BucketNum:		len(bctl.Bucket),
+		Hostname:		hostname,
+		ConfigUpdateInterval:	bctl.Conf.Proxy.BucketUpdateInterval,
+		StatUpdateInterval:	bctl.Conf.Proxy.BucketStatUpdateInterval,
+		BuildDate:		config.BuildDate,
+		LastCommit:		config.LastCommit,
+		EllipticsGoLastCommit:	config.EllipticsGoLastCommit,
+	}
+
+	return ctl, nil
+}
 
 func (bctl *BucketCtl) ReadConfig() (err error) {
 	err = bctl.ReadBucketConfig()
@@ -957,37 +1000,15 @@ func (bctl *BucketCtl) ReadConfig() (err error) {
 		return
 	}
 
-	hostname, err := os.Hostname()
+	ctl, err := bctl.NewBucketCtlStat()
 	if err != nil {
-		err = fmt.Errorf("read-config: hostname error: %v", err)
-		log.Printf("%s", err)
 		return
 	}
 
-	cfg := struct {
-		StartTime	int64
-		BucketNum	int
-		Hostname	string
-		ConfigUpdateInterval	int
-		StatUpdateInterval	int
-		BuildDate	string
-		LastCommit	string
-		EllipticsGoLastCommit	string
-	} {
-		StartTime:		bctl.StartTime.Unix(),
-		BucketNum:		len(bctl.Bucket),
-		Hostname:		hostname,
-		ConfigUpdateInterval:	bctl.Conf.Proxy.BucketUpdateInterval,
-		StatUpdateInterval:	bctl.Conf.Proxy.BucketStatUpdateInterval,
-		BuildDate:		config.BuildDate,
-		LastCommit:		config.LastCommit,
-		EllipticsGoLastCommit:	config.EllipticsGoLastCommit,
-	}
-
-	err = bctl.UpdateMetadata(fmt.Sprintf("%s.ReadConfig", hostname), &cfg)
+	err = bctl.UpdateMetadata(fmt.Sprintf("%s.ReadConfig", ctl.Hostname), ctl)
 	if err == nil {
 		log.Printf("read-config: updated metadata: hostname: %s, build-data: %s, last-commit: %s, elliptics-go-last-commit: %s\n",
-			hostname, config.BuildDate, config.LastCommit, config.EllipticsGoLastCommit)
+			ctl.Hostname, config.BuildDate, config.LastCommit, config.EllipticsGoLastCommit)
 	}
 
 	return nil
