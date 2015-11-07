@@ -463,6 +463,7 @@ func stat_handler(w http.ResponseWriter, req *http.Request, strings ...string) R
 var estimator_scan_handlers map[string]*handler
 
 type proxy_stat_reply struct {
+	BucketCtlStat	*bucket.BucketCtlStat
 	Handlers	map[string]*handler	`json:"handlers"`
 	Errors		[]ErrorInfo		`json:"errors"`
 }
@@ -475,6 +476,7 @@ func proxy_stat_handler(w http.ResponseWriter, req *http.Request, strings ...str
 	}
 
 	res := proxy_stat_reply {
+		BucketCtlStat:	proxy.bctl.NewBucketCtlStat(),
 		Handlers:	estimator_scan_handlers,
 		Errors:		make([]ErrorInfo, l),
 	}
