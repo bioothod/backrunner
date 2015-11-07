@@ -1,15 +1,15 @@
 FROM ubuntu:trusty
-#FROM reverbrain/backrunner:1.5.1.0.6
+#FROM reverbrain/backrunner:1.5.1.0.8
 
 RUN	echo "deb http://repo.reverbrain.com/trusty/ current/amd64/" > /etc/apt/sources.list.d/reverbrain.list && \
 	echo "deb http://repo.reverbrain.com/trusty/ current/all/" >> /etc/apt/sources.list.d/reverbrain.list && \
-	apt-get install -y curl tzdata && \
-	cp -f /usr/share/zoneinfo/posix/W-SU /etc/localtime && \
-	echo Europe/Moscow > /etc/timezeone && \
+	apt-get install -y curl && \
 	curl http://repo.reverbrain.com/REVERBRAIN.GPG | apt-key add - && \
 	apt-get update && \
 	apt-get upgrade -y && \
-	apt-get install -y git elliptics-client elliptics-dev g++ make
+	apt-get install -y curl git elliptics-client elliptics-dev g++ make && \
+	cp -f /usr/share/zoneinfo/posix/W-SU /etc/localtime && \
+	echo Europe/Moscow > /etc/timezeone
 
 RUN 	VERSION=go1.5.1 && \
 	curl -O https://storage.googleapis.com/golang/$VERSION.linux-amd64.tar.gz && \
