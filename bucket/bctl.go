@@ -659,9 +659,9 @@ func (bctl *BucketCtl) SetGroupsTimeout(s *elliptics.Session, bucket *Bucket, ke
 
 	// if there are no backends being defragmented, use weights to mix read states
 	// if there are such backends, use strict order and read from non-defragmented backends first
-	ioflags := elliptics.IOflag(bctl.Conf.Proxy.ReaderIOFlags)
+	ioflags := elliptics.IOflag(bctl.Conf.Proxy.ReaderIOFlags) | s.GetIOflags()
 	if len(defrag_groups) == 0 {
-		//ioflags |= DNET_IO_FLAGS_MIX_STATES
+		ioflags |= elliptics.DNET_IO_FLAGS_MIX_STATES
 	}
 	s.SetIOflags(ioflags)
 
