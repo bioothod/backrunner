@@ -1,6 +1,7 @@
 #!/usr/bin/env make
 
-backrunner_config=github.com/bioothod/backrunner/config
+backrunner=github.com/bioothod/backrunner
+backrunner_config=${backrunner}/config
 
 BUILD_DATE=$(shell date "+%Y-%m-%d/%H:%M:%S/%z")
 
@@ -15,3 +16,6 @@ all: build
 
 build:
 	go build -o backrunner ${GO_LDFLAGS} proxy.go
+
+install:
+	go install -${GO_LDFLAGS} ${backrunner}
