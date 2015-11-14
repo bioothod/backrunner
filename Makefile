@@ -15,7 +15,9 @@ GO_LDFLAGS=-ldflags "-X ${backrunner_config}.BuildDate=${BUILD_DATE} \
 all: build
 
 build:
+	rm -f backrunner bmeta
 	go build -o backrunner ${GO_LDFLAGS} proxy.go
+	go build -o bmeta meta/bmeta.go
 
-install:
-	go install -${GO_LDFLAGS} ${backrunner}
+install: build
+	cp -rf backrunner bmeta ${GOPATH}/bin/
