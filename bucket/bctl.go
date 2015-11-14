@@ -590,6 +590,7 @@ func (bctl *BucketCtl) Get(bname, key string, req *http.Request) (resp []byte, e
 	}
 	defer s.Delete()
 
+	s.SetFilter(elliptics.SessionFilterAll)
 	s.SetNamespace(bucket.Name)
 	s.SetGroups(bucket.Meta.Groups)
 	s.SetIOflags(elliptics.IOflag(bctl.Conf.Proxy.ReaderIOFlags))
@@ -698,6 +699,7 @@ func (bctl *BucketCtl) Stream(bname, key string, w http.ResponseWriter, req *htt
 	}
 	defer s.Delete()
 
+	s.SetFilter(elliptics.SessionFilterAll)
 	s.SetNamespace(bucket.Name)
 	bctl.SetGroupsTimeout(s, bucket, key)
 
