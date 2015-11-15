@@ -9,6 +9,7 @@ import (
 	"github.com/bioothod/backrunner/etransport"
 	"github.com/bioothod/backrunner/reply"
 	"github.com/bioothod/elliptics-go/elliptics"
+	"io"
 	"io/ioutil"
 	"log"
 	//"math"
@@ -1090,7 +1091,7 @@ func (bctl *BucketCtl) ReadBucketsMetaNolock(names []string) (new_buckets []*Buc
 	return
 }
 
-func (bctl *BucketCtl) DumpProfile(add_time bool) {
+func (bctl *BucketCtl) DumpProfileFile(add_time bool) {
 	if len(bctl.Conf.Proxy.Root) != 0 {
 		profile := ProfilePath
 		if add_time {
@@ -1105,9 +1106,19 @@ func (bctl *BucketCtl) DumpProfile(add_time bool) {
 		}
 		defer file.Close()
 
-		fmt.Fprintf(file, "profile dump: %s\n", time.Now().String())
-		pprof.Lookup("block").WriteTo(file, 2)
+		bctl.DumpProfile(file)
 	}
+}
+
+func (bctl *BucketCtl) DumpProfileSingle(out io.Writer, name string) {
+	fmt.Fprintf(out, "\n\n===========================  %s dump: %s\n", name, time.Now().String())
+	pprof.Lookup(name).WriteTo(out, 2)
+}
+
+func (bctl *BucketCtl) DumpProfile(out io.Writer) {
+	bctl.DumpProfileSingle(out, "goroutine")
+	bctl.DumpProfileSingle(out, "heap")
+	bctl.DumpProfileSingle(out, "threadcreate")
 }
 
 func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path string) (bctl *BucketCtl, err error) {
@@ -1138,7 +1149,7 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 
 	go func() {
 		for {
-			bctl.DumpProfile(false)
+			bctl.DumpProfileFile(false)
 			time.Sleep(30 * time.Second)
 		}
 	}()
