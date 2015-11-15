@@ -427,8 +427,14 @@ func common_handler(w http.ResponseWriter, req *http.Request, strings ...string)
 	return GoodReplyLength(uint64(len(data)))
 }
 
+func profile_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
+	proxy.bctl.DumpProfile(w)
+	return GoodReply()
+}
+
 func exit_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
-	proxy.bctl.DumpProfile(true)
+	proxy.bctl.DumpProfileFile(true)
+	proxy.bctl.DumpProfile(w)
 	os.Exit(-1)
 	return GoodReply()
 }
@@ -580,6 +586,11 @@ var proxy_handlers = map[string]*handler {
 		Params:	0,
 		Methods: []string{"GET"},
 		Function: exit_handler,
+	},
+	"profile": &handler{
+		Params:	0,
+		Methods: []string{"GET"},
+		Function: profile_handler,
 	},
 }
 
