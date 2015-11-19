@@ -14,7 +14,7 @@ type KeyError struct {
 }
 
 func (k *KeyError) Error() string {
-	return fmt.Sprintf("url: %s: error code: %d, returned data: '%s'",
+	return fmt.Sprintf("url: %s: error status: %d, returned data: '%s'",
 		k.url, k.status, k.data)
 }
 
@@ -22,7 +22,7 @@ func EllipticsErrorToStatus(err error) int {
 	status := http.StatusBadRequest
 
 	if de, ok := err.(*elliptics.DnetError); ok {
-		err_code := elliptics.ErrorStatus(de)
+		err_code := elliptics.ErrorCode(de)
 
 		switch syscall.Errno(-err_code) {
 		case syscall.ENXIO:
@@ -57,6 +57,9 @@ func ErrorData(err error) string {
 	if ke, ok := err.(*KeyError); ok {
 		return ke.data
 	}
+	if ke, ok := err.(*elliptics.DnetError); ok {
+		return ErrorData(ke)
+	}
 
 	return err.Error()
 }
@@ -71,7 +74,7 @@ func NewKeyError(url string, status int, data string) (err *KeyError) {
 }
 
 func NewKeyErrorFromEllipticsError(ellerr error, url, message string) (err *KeyError) {
-	err_code := elliptics.ErrorStatus(ellerr)
+	err_code := elliptics.ErrorCode(ellerr)
 	err_message := elliptics.ErrorData(ellerr)
 	status := EllipticsErrorToStatus(ellerr)
 
