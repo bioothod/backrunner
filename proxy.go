@@ -752,10 +752,6 @@ func main() {
 	config_file := flag.String("config", "", "Transport config file")
 	flag.Parse()
 
-	if *buckets == "" {
-		log.Fatal("there is no buckets file")
-	}
-
 	if *config_file == "" {
 		log.Fatal("You must specify config file")
 	}
@@ -773,6 +769,11 @@ func main() {
 		log.Fatalf("Could not load config %s: %q", *config_file, err)
 	}
 
+	if *buckets == "" && len(conf.Elliptics.BucketList) == 0 {
+		log.Fatalf("There is no buckets file and there is no 'bucket-list' option in elliptics config.")
+	}
+
+
 	if len(conf.Proxy.Address) == 0 {
 		log.Fatalf("'address' must be specified in proxy config '%s'\n", *config_file)
 	}
@@ -789,11 +790,11 @@ func main() {
 		log.Fatalf("Could not create Elliptics transport: %v", err)
 	}
 
-	rand.Seed(9)
+	rand.Seed(time.Now().Unix())
 
 	proxy.bctl, err = bucket.NewBucketCtl(proxy.ell, *buckets, *config_file)
 	if err != nil {
-		log.Fatalf("Could not process buckets file '%s': %v", *buckets, err)
+		log.Fatalf("Could not create new bucket controller: %v", err)
 	}
 
 	if len(conf.Proxy.HTTPSAddress) != 0 {
