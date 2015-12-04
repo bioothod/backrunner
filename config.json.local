@@ -1,6 +1,7 @@
 {
 	"elliptics": {
-		"log-file": "/dev/stdout",
+		"1log-file": "/dev/stdout",
+		"log-file": "backrunner.log",
 		"log-level": "info",
 		"log-prefix": "backrunner: ",
 		"remote": [
@@ -8,7 +9,10 @@
 			"localhost:1025:2",
 			"localhost:1026:2"
 		],
-		"metadata-groups": [1,2]
+		"metadata-groups": [1,2],
+
+		"backrunner-config-key": "backrunner.localhost.config.key",
+		"bucket-list-key": "buckets.localhost.key"
 	},
 	"proxy": {
 		"address": "0.0.0.0:9090",
