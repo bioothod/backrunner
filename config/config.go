@@ -110,6 +110,12 @@ type EllipticsClientConfig struct {
 	LogPrefix string			`json:"log-prefix"`
 	Remote []string				`json:"remote"`
 	MetadataGroups []uint32			`json:"metadata-groups"`
+
+	// when present, backrunner reads its proxy config from elliptics from metadata groups
+	BackrunnerConfig string			`json:"backrunner-config-key"`
+
+	// when present, backrunner reads list of buckets from elliptics
+	BucketList string			`json:"bucket-list-key"`
 }
 
 type ProxyClientConfig struct {

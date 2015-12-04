@@ -874,12 +874,50 @@ func (bctl *BucketCtl) Stat(req *http.Request) (reply *BctlStat, err error) {
 	return
 }
 
-func (bctl *BucketCtl) ReadBucketConfig() error {
-	data, err := ioutil.ReadFile(bctl.bucket_path)
+func (bctl *BucketCtl) EllipticsReadBucketList() (data []byte, err error) {
+	ms, err := bctl.e.MetadataSession()
 	if err != nil {
-		err = fmt.Errorf("Could not read bucket file '%s': %v", bctl.bucket_path, err)
-		log.Printf("config: %v\n", err)
-		return err
+		return
+	}
+
+	ms.SetNamespace(BucketNamespace)
+
+	for rd := range ms.ReadData(bctl.Conf.Elliptics.BucketList, 0, 0) {
+		if rd.Error() != nil {
+			err = rd.Error()
+
+			log.Printf("elliptics-read-bucket-list: %s: could not read bucket metadata: %v", bctl.Conf.Elliptics.BucketList, err)
+			return
+		}
+
+		data = rd.Data()
+		return
+	}
+
+	err = fmt.Errorf("elliptics-read-bucket-list: %s: could not read bucket list: ReadData() returned nothing",
+			bctl.Conf.Elliptics.BucketList)
+	return
+}
+
+
+func (bctl *BucketCtl) ReadBucketConfig() (err error) {
+	var data []byte
+
+	if len(bctl.Conf.Elliptics.BucketList) != 0 {
+		data, err = bctl.EllipticsReadBucketList()
+		if err == nil {
+			log.Printf("Successfully read bucket list from: %s\n", bctl.Conf.Elliptics.BucketList)
+		}
+	}
+
+
+	if err != nil || data == nil || len(data) == 0 || len(bctl.Conf.Elliptics.BucketList) == 0 {
+		data, err = ioutil.ReadFile(bctl.bucket_path)
+		if err != nil {
+			err = fmt.Errorf("Could not read bucket file '%s': %v", bctl.bucket_path, err)
+			log.Printf("config: %v\n", err)
+			return err
+		}
 	}
 
 	new_buckets := make([]*Bucket, 0, 0)
