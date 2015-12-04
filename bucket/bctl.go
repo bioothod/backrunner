@@ -879,6 +879,7 @@ func (bctl *BucketCtl) EllipticsReadBucketList() (data []byte, err error) {
 	if err != nil {
 		return
 	}
+	defer ms.Delete()
 
 	ms.SetNamespace(BucketNamespace)
 
@@ -886,7 +887,7 @@ func (bctl *BucketCtl) EllipticsReadBucketList() (data []byte, err error) {
 		if rd.Error() != nil {
 			err = rd.Error()
 
-			log.Printf("elliptics-read-bucket-list: %s: could not read bucket metadata: %v", bctl.Conf.Elliptics.BucketList, err)
+			log.Printf("elliptics-read-bucket-list: %s: could not read bucket list: %v", bctl.Conf.Elliptics.BucketList, err)
 			return
 		}
 
@@ -896,6 +897,7 @@ func (bctl *BucketCtl) EllipticsReadBucketList() (data []byte, err error) {
 
 	err = fmt.Errorf("elliptics-read-bucket-list: %s: could not read bucket list: ReadData() returned nothing",
 			bctl.Conf.Elliptics.BucketList)
+	log.Printf(err.Error())
 	return
 }
 
@@ -955,11 +957,62 @@ func (bctl *BucketCtl) ReadBucketConfig() (err error) {
 	return nil
 }
 
+func (bctl *BucketCtl) EllipticsReadBackrunnerConfig(conf *config.ProxyConfig, conf_key string) (err error) {
+	ms, err := bctl.e.MetadataSession()
+	if err != nil {
+		return
+	}
+	defer ms.Delete()
+
+	ms.SetNamespace(BucketNamespace)
+
+	for rd := range ms.ReadData(conf_key, 0, 0) {
+		if rd.Error() != nil {
+			err = rd.Error()
+
+			log.Printf("elliptics-read-backrunner-config: %s: could not read backrunner config: %v",
+				conf_key, err)
+			return
+		}
+
+		reader := bytes.NewReader(rd.Data())
+		err = conf.LoadIO(reader)
+		if err != nil {
+			log.Printf("elliptics-read-backrunner-config: %s: could not load config from elliptics data: %v",
+				conf_key, err)
+			return
+		}
+
+		return
+	}
+
+	err = fmt.Errorf("elliptics-read-backrunner-config: %s: could not read backrunner config: ReadData() returned nothing",
+			conf_key)
+	log.Printf(err.Error())
+	return
+}
+
 func (bctl *BucketCtl) ReadProxyConfig() error {
 	conf := &config.ProxyConfig {}
 	err := conf.Load(bctl.proxy_config_path)
 	if err != nil {
 		return fmt.Errorf("could not load proxy config file '%s': %v", bctl.proxy_config_path, err)
+	}
+
+	if len(conf.Elliptics.BackrunnerConfig) != 0 {
+		ell_conf := &config.ProxyConfig {}
+		err = bctl.EllipticsReadBackrunnerConfig(ell_conf, conf.Elliptics.BackrunnerConfig)
+		if err == nil {
+			log.Printf("Successfully read backrunner config from: %s\n", conf.Elliptics.BackrunnerConfig)
+			conf = ell_conf
+		}
+	}
+
+	if err != nil || len(conf.Elliptics.BackrunnerConfig) == 0 {
+		err = conf.Load(bctl.proxy_config_path)
+		if err != nil {
+			return fmt.Errorf("could not load proxy config file '%s': %v", bctl.proxy_config_path, err)
+		}
 	}
 
 	bctl.Lock()
@@ -1081,16 +1134,16 @@ func (bctl *BucketCtl) NewBucketCtlStat() (*BucketCtlStat) {
 }
 
 func (bctl *BucketCtl) ReadConfig() (err error) {
-	err = bctl.ReadBucketConfig()
+	err = bctl.ReadProxyConfig()
 	if err != nil {
-		err = fmt.Errorf("read-config: failed to update bucket config: %v", err)
+		err = fmt.Errorf("read-config: failed to update proxy config: %v", err)
 		log.Printf("%s", err)
 		return
 	}
 
-	err = bctl.ReadProxyConfig()
+	err = bctl.ReadBucketConfig()
 	if err != nil {
-		err = fmt.Errorf("read-config: failed to update proxy config: %v", err)
+		err = fmt.Errorf("read-config: failed to update bucket config: %v", err)
 		log.Printf("%s", err)
 		return
 	}
