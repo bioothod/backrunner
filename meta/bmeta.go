@@ -38,7 +38,7 @@ func bmeta_read_upload_file(ell *etransport.Elliptics, file, key string) (err er
 			continue
 		}
 
-		fmt.Printf("Successfully uploaded %s into elliptics using key %s\n", fule, key)
+		fmt.Printf("Successfully uploaded %s into elliptics using key %s\n", file, key)
 		return
 	}
 
@@ -98,7 +98,7 @@ func bmeta_read_upload(ell *etransport.Elliptics, file string) (err error) {
 func main() {
 	bname := flag.String("bucket", "", "bucket name to read")
 	config_file := flag.String("config", "", "transport config file")
-	backrunner_config := flag.Bool("upload-backrunner-config", "",
+	backrunner_config := flag.String("upload-backrunner-config", "",
 		"backrunner config file to upload into elliptics using 'backrunner-config-key' config parameter")
 	bucket_list_upload := flag.String("upload-bucket-list", "",
 		"bucket list to upload into elliptics using 'bucket-list-key' config parameter")
