@@ -848,7 +848,7 @@ type BctlStat struct {
 	StatTime	string
 }
 
-func (bctl *BucketCtl) Stat(req *http.Request) (reply *BctlStat, err error) {
+func (bctl *BucketCtl) Stat(req *http.Request, bnames []string) (reply *BctlStat, err error) {
 	bctl.RLock()
 	defer bctl.RUnlock()
 
@@ -858,6 +858,20 @@ func (bctl *BucketCtl) Stat(req *http.Request) (reply *BctlStat, err error) {
 	}
 
 	for _, b := range bctl.AllBuckets() {
+		if len(bnames) != 0 {
+			found := false
+			for _, name := range(bnames) {
+				if b.Name == name {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				continue
+			}
+		}
+
 		bs := &BucketStat {
 			Group:	make(map[string]*elliptics.StatGroupData),
 			Meta:	&b.Meta,

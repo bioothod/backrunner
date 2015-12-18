@@ -439,8 +439,18 @@ func exit_handler(w http.ResponseWriter, req *http.Request, strings ...string) R
 	return GoodReply()
 }
 
-func stat_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
-	reply, err := proxy.bctl.Stat(req)
+func stat_handler(w http.ResponseWriter, req *http.Request, str ...string) Reply {
+	bnames := make([]string, 0)
+
+	bnames_combined := strings.SplitN(str[0], "/", 2)
+	if len(bnames_combined[0]) != 0 {
+		bnames = strings.Split(bnames_combined[0], ",")
+		if len(bnames[0]) == 0 {
+			bnames = []string{}
+		}
+	}
+
+	reply, err := proxy.bctl.Stat(req, bnames)
 	if err != nil {
 		return Reply {
 			err: err,
@@ -660,7 +670,12 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 							len(hstrings) - 1, h.Params + 1))
 					ok = false
 				} else {
-					param_strings = strings.SplitN(hstrings[2], "/", h.Params)
+					if h.Params == 0 {
+						param_strings = append(param_strings, hstrings[2])
+					} else {
+						param_strings = strings.SplitN(hstrings[2], "/", h.Params)
+					}
+
 					if len(param_strings) < h.Params {
 						reply.err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
 							fmt.Sprintf("not enough path parameters for handler: %v, must be at least: %d",
