@@ -569,56 +569,6 @@ func (bctl *BucketCtl) BucketUpload(bucket_name, key string, req *http.Request) 
 	return
 }
 
-func (bctl *BucketCtl) Get(bname, key string, req *http.Request) (resp []byte, err error) {
-	bucket, err := bctl.FindBucket(bname)
-	if err != nil {
-		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, err.Error())
-		return
-	}
-
-	err = bucket.check_auth(req, BucketAuthEmpty)
-	if err != nil {
-		err = errors.NewKeyError(req.URL.String(), errors.ErrorStatus(err),
-			fmt.Sprintf("get: %s", errors.ErrorData(err)))
-		return
-	}
-
-	s, err := bctl.e.DataSession(req)
-	if err != nil {
-		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
-			fmt.Sprintf("get: could not create data session: %v", err))
-		return
-	}
-	defer s.Delete()
-
-	s.SetFilter(elliptics.SessionFilterAll)
-	s.SetNamespace(bucket.Name)
-	s.SetGroups(bucket.Meta.Groups)
-	s.SetIOflags(elliptics.IOflag(bctl.Conf.Proxy.ReaderIOFlags))
-
-	log.Printf("get-trace-id: %x: url: %s, bucket: %s, key: %s, id: %s\n",
-		s.GetTraceID(), req.URL.String(), bucket.Name, key, s.Transform(key))
-
-	offset, size, err := URIOffsetSize(req)
-	if err != nil {
-		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, fmt.Sprintf("get: %v", err))
-		return
-	}
-
-	for rd := range s.ReadData(key, offset, size) {
-		err = rd.Error()
-		if err != nil {
-			err = errors.NewKeyErrorFromEllipticsError(rd.Error(), req.URL.String(),
-				"get: could not read data")
-			continue
-		}
-
-		resp = rd.Data()
-		return
-	}
-	return
-}
-
 func (bctl *BucketCtl) SetContentType(key string, w http.ResponseWriter) {
 	bctl.RLock()
 	defer bctl.RUnlock()
