@@ -640,8 +640,6 @@ func (bctl *BucketCtl) Stream(bname, key string, w http.ResponseWriter, req *htt
 		return
 	}
 
-	bctl.SetContentType(key, w)
-
 	s, err := bctl.e.DataSession(req)
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
@@ -657,18 +655,17 @@ func (bctl *BucketCtl) Stream(bname, key string, w http.ResponseWriter, req *htt
 	log.Printf("stream-trace-id: %x: url: %s, bucket: %s, key: %s, id: %s\n",
 		s.GetTraceID(), req.URL.String(), bucket.Name, key, s.Transform(key))
 
-	offset, size, err := URIOffsetSize(req)
+	rs, err := elliptics.NewReadSeeker(s, key)
 	if err != nil {
-		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, fmt.Sprintf("stream: %v", err))
+		err = errors.NewKeyErrorFromEllipticsError(err, req.URL.String(), "stream: could not create read-seeker")
 		return
 	}
+	defer rs.Free()
 
-	err = s.StreamHTTP(key, offset, size, w)
-	if err != nil {
-		err = errors.NewKeyErrorFromEllipticsError(err, req.URL.String(), "stream: could not stream data")
-		return
-	}
+	var modtime time.Time
 
+	bctl.SetContentType(key, w)
+	http.ServeContent(w, req, key, modtime, rs)
 	return
 }
 
