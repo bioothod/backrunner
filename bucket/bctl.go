@@ -662,10 +662,8 @@ func (bctl *BucketCtl) Stream(bname, key string, w http.ResponseWriter, req *htt
 	}
 	defer rs.Free()
 
-	var modtime time.Time
-
 	bctl.SetContentType(key, w)
-	http.ServeContent(w, req, key, modtime, rs)
+	http.ServeContent(w, req, key, rs.Mtime, rs)
 	return
 }
 
