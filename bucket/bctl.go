@@ -7,6 +7,7 @@ import (
 	"github.com/bioothod/backrunner/config"
 	"github.com/bioothod/backrunner/errors"
 	"github.com/bioothod/backrunner/etransport"
+	"github.com/bioothod/backrunner/range"
 	"github.com/bioothod/backrunner/reply"
 	"github.com/bioothod/elliptics-go/elliptics"
 	"io"
@@ -50,32 +51,6 @@ const (
 
 	PainDiscrepancy float64		= 1000.0
 )
-
-func URIOffsetSize(req *http.Request) (offset uint64, size uint64, err error) {
-	offset = 0
-	size = 0
-
-	q := req.URL.Query()
-	offset_str := q.Get("offset")
-	if offset_str != "" {
-		offset, err = strconv.ParseUint(offset_str, 0, 64)
-		if err != nil {
-			err = fmt.Errorf("could not parse offset URI: %s: %v", offset_str, err)
-			return
-		}
-	}
-
-	size_str := q.Get("size")
-	if size_str != "" {
-		size, err = strconv.ParseUint(size_str, 0, 64)
-		if err != nil {
-			err = fmt.Errorf("could not parse size URI: %s: %v", size_str, err)
-			return
-		}
-	}
-
-	return offset, size, nil
-}
 
 type BucketCtl struct {
 	sync.RWMutex
@@ -484,11 +459,17 @@ func (bctl *BucketCtl) bucket_upload(bucket *Bucket, key string, req *http.Reque
 	log.Printf("upload-trace-id: %x: url: %s, bucket: %s, key: %s, id: %s\n",
 		s.GetTraceID(), req.URL.String(), bucket.Name, key, s.Transform(key))
 
-	offset, _, err := URIOffsetSize(req)
+	ranges, err := ranges.ParseRange(req.Header.Get("Range"), int64(total_size))
 	if err != nil {
 		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, fmt.Sprintf("upload: %v", err))
 		return
 	}
+
+	var offset uint64 = 0
+	if len(ranges) != 0 {
+		offset = uint64(ranges[0].Start)
+	}
+
 
 	start := time.Now()
 

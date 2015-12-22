@@ -10,6 +10,7 @@ import (
 	"github.com/bioothod/backrunner/errors"
 	"github.com/bioothod/backrunner/estimator"
 	"github.com/bioothod/backrunner/etransport"
+	"github.com/bioothod/backrunner/range"
 	"github.com/bioothod/backrunner/reply"
 	"io/ioutil"
 	"log"
@@ -236,14 +237,22 @@ func redirect_handler(w http.ResponseWriter, req *http.Request, string_keys ...s
 		slash = ""
 	}
 
-	offset, size, err := bucket.URIOffsetSize(req)
+	ranges, err := ranges.ParseRange(req.Header.Get("Range"), int64(srv.Size))
 	if err != nil {
-		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, fmt.Sprintf("redirect: %v", err))
+		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, fmt.Sprintf("upload: %v", err))
 		return Reply {
 			err: err,
 			status: errors.ErrorStatus(err),
 		}
 	}
+
+	var offset uint64 = 0
+	var size uint64 = 0
+	if len(ranges) != 0 {
+		offset = uint64(ranges[0].Start)
+		size = uint64(ranges[0].Length)
+	}
+
 
 	if offset >= srv.Size {
 		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
