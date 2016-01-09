@@ -1,7 +1,7 @@
 {
 	"elliptics": {
-		"1log-file": "/dev/stdout",
-		"log-file": "backrunner.log",
+		"log-file": "/dev/stdout",
+		"log-file1": "backrunner.log",
 		"log-level": "info",
 		"log-prefix": "backrunner: ",
 		"remote": [
@@ -11,8 +11,18 @@
 		],
 		"metadata-groups": [1,2],
 
-		"backrunner-config-key": "backrunner.localhost.config.key",
-		"bucket-list-key": "buckets.localhost.key"
+		"backrunner-config-key1": "backrunner.localhost.config.key",
+		"bucket-list-key1": "buckets.localhost.key",
+
+		"node-config": {
+			"io-thread-num": 12,
+			"nonblocking-io-thread-num": 6,
+			"net-thread-num": 8,
+			"wait-timeout": 60,
+			"check-timeout": 30,
+			"flags": 0,
+			"stall-count": 5
+		}
 	},
 	"proxy": {
 		"address": "0.0.0.0:9090",
@@ -40,7 +50,7 @@
 			"mp3" : "audio/mpeg"
 		},
 
-		"reader-io-flags": 256,
+		"reader-io-flags": 0,
 		"writer-io-flags": 0
 	}
 }

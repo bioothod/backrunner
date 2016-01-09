@@ -89,7 +89,6 @@ func (e *Elliptics) Stat() (stat *elliptics.DnetStat, err error) {
 	}
 	defer s.Delete()
 
-	s.SetTimeout(10)
 	stat = s.DnetStat()
 
 	e.Lock()
@@ -120,7 +119,13 @@ func NewEllipticsTransport(conf *config.ProxyConfig) (e *Elliptics, err error) {
 	log.SetOutput(e.LogFile)
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
-	e.Node, err = elliptics.NewNode(conf.Elliptics.LogFile, conf.Elliptics.LogLevel)
+	var default_config elliptics.NodeConfig
+	if conf.Elliptics.Node != default_config {
+		e.Node, err = elliptics.NewNodeConfig(conf.Elliptics.LogFile, conf.Elliptics.LogLevel, &conf.Elliptics.Node)
+	} else {
+		e.Node, err = elliptics.NewNode(conf.Elliptics.LogFile, conf.Elliptics.LogLevel)
+	}
+
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/bioothod/elliptics-go/elliptics"
 	"io"
 	"io/ioutil"
 	"os"
@@ -118,6 +119,9 @@ type EllipticsClientConfig struct {
 
 	// when present, backrunner reads list of buckets from elliptics
 	BucketList string			`json:"bucket-list-key"`
+
+	// elliptics node config parameters like number of IO threads, various timeouts, flags and so on
+	Node elliptics.NodeConfig		`json:"node-config"`
 }
 
 type ProxyClientConfig struct {
