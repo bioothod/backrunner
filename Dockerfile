@@ -1,5 +1,5 @@
 FROM ubuntu:trusty
-#FROM reverbrain/backrunner:1.5.1.0.8
+#FROM reverbrain/backrunner:1.5.2.0.14
 
 RUN	echo "deb http://repo.reverbrain.com/trusty/ current/amd64/" > /etc/apt/sources.list.d/reverbrain.list && \
 	echo "deb http://repo.reverbrain.com/trusty/ current/all/" >> /etc/apt/sources.list.d/reverbrain.list && \
@@ -11,7 +11,7 @@ RUN	echo "deb http://repo.reverbrain.com/trusty/ current/amd64/" > /etc/apt/sour
 	cp -f /usr/share/zoneinfo/posix/W-SU /etc/localtime && \
 	echo Europe/Moscow > /etc/timezeone
 
-RUN 	VERSION=go1.5.1 && \
+RUN 	VERSION=go1.5.2 && \
 	curl -O https://storage.googleapis.com/golang/$VERSION.linux-amd64.tar.gz && \
 	tar -C /usr/local -xf $VERSION.linux-amd64.tar.gz && \
 	rm -f $VERSION.linux-amd64.tar.gz
@@ -28,20 +28,20 @@ RUN	git config --global user.email "zbr@ioremap.net" && \
 	export PATH=$PATH:/usr/local/go/bin && \
 	mkdir -p /root/go && \
 	export GOPATH=/root/go && \
+	rm -rf ${GOPATH}/src/github.com/bioothod/elliptics-go ${GOPATH}/src/github.com/bioothod/backrunner && \
 	go get github.com/bioothod/elliptics-go/elliptics && \
 	cd /root/go/src/github.com/bioothod/elliptics-go/elliptics && \
 	git checkout master && \
 	git pull && \
 	git branch -v && \
 	go install && \
-	echo "Go binding has been updated" && \
+	echo "Go bindings have been updated" && \
 	go get github.com/bioothod/backrunner && \
 	cd /root/go/src/github.com/bioothod/backrunner && \
 	git checkout master && \
 	git pull && \
 	git branch -v && \
-	make && \
-	go install && \
+	make install && \
 	echo "Backrunner has been updated" ;\
     	rm -rf /var/lib/apt/lists/*
 
