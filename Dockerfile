@@ -29,6 +29,7 @@ RUN	git config --global user.email "zbr@ioremap.net" && \
 	mkdir -p /root/go && \
 	export GOPATH=/root/go && \
 	rm -rf ${GOPATH}/src/github.com/bioothod/elliptics-go ${GOPATH}/src/github.com/bioothod/backrunner && \
+	rm -rf ${GOPATH}/pkg/* && \
 	go get github.com/bioothod/elliptics-go/elliptics && \
 	cd /root/go/src/github.com/bioothod/elliptics-go/elliptics && \
 	git checkout master && \
