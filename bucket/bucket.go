@@ -130,11 +130,15 @@ func (meta *BucketMsgpack) ExtractMsgpack(out []interface{}) (err error) {
 	if len(out) < 10 {
 		return fmt.Errorf("array length: %d, must be at least 10", len(out))
 	}
-	meta.Version = int32(out[0].(int64))
+	if v, ok := cast_to_uint64(out[0]); ok {
+		meta.Version = int32(v)
+	}
 	if meta.Version != 1 {
 		return fmt.Errorf("unsupported metadata version %d", meta.Version)
 	}
-	meta.Name = out[1].(string)
+	if meta.Name, ok = out[1].(string); !ok {
+		return fmt.Errorf("unsupported metadata format, name is not string")
+	}
 
 	meta.Acl = make(map[string]BucketACL)
 	for _, i := range out[2].(map[interface{}]interface{}) {
