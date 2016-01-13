@@ -75,9 +75,6 @@ type BucketCtl struct {
 	// time when the last time config update was done
 	ConfigTime		time.Time
 
-	// time when previous defragmentation scan was performed
-	DefragTime		time.Time
-
 	// buckets used for automatic write bucket selection,
 	// i.e. when client doesn't provide bucket name and we select it
 	// according to its performance and capacity
@@ -1165,7 +1162,6 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 		BucketTimer:		time.NewTimer(time.Second * 30),
 		BucketStatTimer:	time.NewTimer(time.Second * 10),
 
-		DefragTime:		time.Now(),
 		StartTime:		time.Now(),
 	}
 
@@ -1214,15 +1210,6 @@ func NewBucketCtl(ell *etransport.Elliptics, bucket_path, proxy_config_path stri
 				bctl.BackBucket = make([]*Bucket, 0, 10)
 				bctl.Unlock()
 			}
-		}
-	}()
-
-	go func() {
-		for {
-			// run defragmentation scan
-			bctl.ScanBuckets()
-
-			time.Sleep(31 * time.Second)
 		}
 	}()
 
