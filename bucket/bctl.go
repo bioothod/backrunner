@@ -243,6 +243,8 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 			}
 
 			free_space_rate := FreeSpaceRatio(st, uint64(req.ContentLength))
+			bs.Pain += 1000.0 / free_space_rate * 5
+
 			if free_space_rate <= bctl.Conf.Proxy.FreeSpaceRatioHard {
 				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
 
@@ -250,17 +252,9 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 			} else if free_space_rate <= bctl.Conf.Proxy.FreeSpaceRatioSoft {
 				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
 
-				free_space_pain := 1000.0 / (free_space_rate - bctl.Conf.Proxy.FreeSpaceRatioHard)
-				bs.Pain += PainNoFreeSpaceSoft + free_space_pain * 5
+				bs.Pain += PainNoFreeSpaceSoft
 			} else {
 				bs.SuccessGroups = append(bs.SuccessGroups, group_id)
-
-				free_space_pain := 1000.0 / (free_space_rate - bctl.Conf.Proxy.FreeSpaceRatioSoft)
-				if free_space_pain >= PainNoFreeSpaceSoft {
-					free_space_pain = PainNoFreeSpaceSoft * 0.8
-				}
-
-				bs.Pain += free_space_pain
 			}
 
 			pp := st.PIDPain()
@@ -310,7 +304,9 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 
 		// do not even consider buckets without free space even in one group
 		if bs.Pain >= PainNoFreeSpaceHard {
-			//log.Printf("find-bucket: url: %s, bucket: %s, content-length: %d, groups: %v, success-groups: %v, error-groups: %v, pain: %f, pains: %v, free_rates: %v: pain is higher than HARD limit\n",
+			//log.Printf("find-bucket: url: %s, bucket: %s, content-length: %d, " +
+			//	"groups: %v, success-groups: %v, error-groups: %v, " +
+			//	"pain: %f, pains: %v, free_rates: %v: pain is higher than HARD limit\n",
 			//	req.URL.String(), b.Name, req.ContentLength, b.Meta.Groups, bs.SuccessGroups, bs.ErrorGroups, bs.Pain,
 			//	bs.pains, bs.free_rates)
 			failed = append(failed, bs)
@@ -333,8 +329,11 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 	if len(stat) == 0 {
 		str := make([]string, 0)
 		for _, bs := range failed {
-			str = append(str, fmt.Sprintf("{bucket: %s, success-groups: %v, error-groups: %v, groups: %v, abs: %v, pain: %f, free-rates: %v}",
-				bs.Bucket.Name, bs.SuccessGroups, bs.ErrorGroups, bs.Bucket.Meta.Groups, bs.abs, bs.Pain, bs.free_rates))
+			str = append(str,
+				fmt.Sprintf("{bucket: %s, success-groups: %v, error-groups: %v, groups: %v, " +
+						"abs: %v, pain: %f, free-rates: %v}",
+						bs.Bucket.Name, bs.SuccessGroups, bs.ErrorGroups, bs.Bucket.Meta.Groups,
+						bs.abs, bs.Pain, bs.free_rates))
 		}
 
 		log.Printf("find-bucket: url: %s, content-length: %d: there are no suitable buckets: %v",
@@ -367,8 +366,11 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 	str := make([]string, 0)
 	show_num := 0
 	for _, bs := range stat {
-		str = append(str, fmt.Sprintf("{bucket: %s, success-groups: %v, error-groups: %v, groups: %v, abs: %v, pain: %f, free-rates: %v}",
-			bs.Bucket.Name, bs.SuccessGroups, bs.ErrorGroups, bs.Bucket.Meta.Groups, bs.abs, bs.Pain, bs.free_rates))
+		str = append(str,
+			fmt.Sprintf("{bucket: %s, success-groups: %v, error-groups: %v, groups: %v, " +
+					"abs: %v, pain: %f, free-rates: %v}",
+					bs.Bucket.Name, bs.SuccessGroups, bs.ErrorGroups, bs.Bucket.Meta.Groups,
+					bs.abs, bs.Pain, bs.free_rates))
 
 		if show_num >= 5 {
 			break
