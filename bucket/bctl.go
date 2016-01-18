@@ -270,7 +270,7 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 			}
 
 			free_space_rate := FreeSpaceRatio(st, uint64(req.ContentLength))
-			bs.Pain += 1000.0 / free_space_rate * 5
+			bs.Pain += 1000.0 / free_space_rate * 5.0
 
 			if free_space_rate <= bctl.Conf.Proxy.FreeSpaceRatioHard {
 				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
@@ -286,7 +286,7 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 
 			pp := st.PIDPain()
 
-			bs.Pain += pp
+			bs.Pain += pp * float64(req.ContentLength)
 			bs.pains = append(bs.pains, pp)
 			bs.free_rates = append(bs.free_rates, free_space_rate)
 		}
