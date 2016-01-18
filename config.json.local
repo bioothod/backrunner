@@ -45,6 +45,7 @@
 		"defrag-max-backends-per-server": 2,
 		"root": "/mnt/disk/elliptics/root",
 		"content-types": {
+			"big" : "octet/stream",
 			"flv" : "video/x-flv",
 			"mp4" : "video/mp4",
 			"mp3" : "audio/mpeg"
