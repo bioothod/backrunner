@@ -246,8 +246,15 @@ func redirect_handler(w http.ResponseWriter, req *http.Request, string_keys ...s
 		}
 	}
 
-	var offset uint64 = 0
-	var size uint64 = 0
+	offset, size, err := bucket.URIOffsetSize(req)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, fmt.Sprintf("redirect: %v", err))
+		return Reply {
+			err: err,
+			status: errors.ErrorStatus(err),
+		}
+	}
+
 	if len(ranges) != 0 {
 		offset = uint64(ranges[0].Start)
 		size = uint64(ranges[0].Length)

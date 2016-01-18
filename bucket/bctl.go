@@ -52,6 +52,33 @@ const (
 	PainDiscrepancy float64		= 1000.0
 )
 
+
+func URIOffsetSize(req *http.Request) (offset uint64, size uint64, err error) {
+	offset = 0
+	size = 0
+
+	q := req.URL.Query()
+	offset_str := q.Get("offset")
+	if offset_str != "" {
+		offset, err = strconv.ParseUint(offset_str, 0, 64)
+		if err != nil {
+			err = fmt.Errorf("could not parse offset URI: %s: %v", offset_str, err)
+			return
+		}
+	}
+
+	size_str := q.Get("size")
+	if size_str != "" {
+		size, err = strconv.ParseUint(size_str, 0, 64)
+		if err != nil {
+			err = fmt.Errorf("could not parse size URI: %s: %v", size_str, err)
+		return
+		}
+	}
+
+	return offset, size, nil
+}
+
 type BucketCtl struct {
 	sync.RWMutex
 
@@ -635,7 +662,21 @@ func (bctl *BucketCtl) Stream(bname, key string, w http.ResponseWriter, req *htt
 	log.Printf("stream-trace-id: %x: url: %s, bucket: %s, key: %s, id: %s\n",
 		s.GetTraceID(), req.URL.String(), bucket.Name, key, s.Transform(key))
 
-	rs, err := elliptics.NewReadSeeker(s, key)
+	offset, size, err := URIOffsetSize(req)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest, fmt.Sprintf("stream: %v", err))
+		return
+	}
+
+	if offset != 0 || size != 0 {
+		if size == 0 {
+			req.Header.Add("Range", fmt.Sprintf("bytes=%d-", offset))
+		} else {
+			req.Header.Add("Range", fmt.Sprintf("bytes=%d-%d", offset, offset + size - 1))
+		}
+	}
+
+	rs, err := elliptics.NewReadSeekerOffsetSize(s, key, offset, size)
 	if err != nil {
 		err = errors.NewKeyErrorFromEllipticsError(err, req.URL.String(), "stream: could not create read-seeker")
 		return
