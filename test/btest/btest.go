@@ -135,15 +135,15 @@ func (t *BackrunnerTest) NewRequest(method, handler, user, token, bucket, key st
 	url := fmt.Sprintf("http://%s/%s", t.conf.Proxy.Address, handler)
 
 	if bucket != "" {
-		url = fmt.Sprintf("%s/%s", url, bucket)
+		url += "/" + bucket
 	}
 	if key != "" {
-		url = fmt.Sprintf("%s/%s", url, key)
+		url += "/" + key
 	}
 
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
-		log.Fatal("Could not create request: method: %s, url: '%s': %v\n", method, url, err)
+		log.Fatalf("Could not create request: method: %s, url: '%s': %v\n", method, url, err)
 	}
 
 	if offset != 0 || size != 0 {
@@ -430,12 +430,12 @@ func (t *BackrunnerTest) check_key_content(bucket, key, user, token string, offs
 
 	data, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("check-content: url: %s: could not read reply: %v", req.URL.String(), req.Header, err)
+		return fmt.Errorf("check-content: url: %s: header: %v, could not read reply: %v", req.URL.String(), req.Header, err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode >= 400 {
 		return fmt.Errorf("check-content: url: %s, returned status: %d, must be: %d, data: %s",
-			req.URL.String(), resp.StatusCode, http.StatusOK, string(data))
+			req.URL.String(), resp.StatusCode, http.StatusOK, hex.Dump(data))
 	}
 
 	if !bytes.Equal(data, content) {
@@ -946,8 +946,10 @@ func test_stats_update(t *BackrunnerTest) error {
 	st1_num := st1.total_operations(bucket, cmd)
 	diff := st2_num - st1_num
 
-	if diff != uint64(num) {
-		return fmt.Errorf("operation counter differs: diff: %d (%d - %d), must be: %d",
+	// number of write operations according to stats can be higher than what we have written,
+	// since backrunner writes some stats (calling @UpdateMetadata() after successfully rereading configs)
+	if diff < uint64(num) {
+		return fmt.Errorf("operation counter differs: diff: %d (%d - %d), must be more than: %d",
 			diff, st2_num, st1_num, num)
 	}
 
