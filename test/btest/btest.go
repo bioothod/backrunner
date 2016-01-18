@@ -36,7 +36,7 @@ type BackrunnerTest struct {
 	base string
 
 	// various log files
-	test_log, server_log, proxy_log string
+	server_log, proxy_log string
 
 	// file where all IO bucket names are stored, it is used by proxy
 	bucket_file string
@@ -793,6 +793,7 @@ func test_bucket_update(t *BackrunnerTest) error {
 	if err != nil {
 		log.Fatalf("Could not upload bucket: %v", err)
 	}
+	log.Printf("test_bucket_update: new bucket: %s, meta: %v\n", bname, meta)
 
 	// bucket has been uploaded into the storage,
 	// let's check that reading/writing from that bucket succeeds
@@ -816,6 +817,7 @@ func test_bucket_update(t *BackrunnerTest) error {
 	if err != nil {
 		log.Fatalf("Could not upload bucket: %v", err)
 	}
+	log.Printf("test_bucket_update: updated bucket: %s, meta: %v\n", bname, meta)
 
 	// trying to read data using old token, it should fail with 403 error
 	req := t.NewEmptyRequest("GET", "get", user, new_token, bname, key)
@@ -1172,6 +1174,7 @@ func test_backend_slowdown(t *BackrunnerTest) error {
 var tests = [](func(t *BackrunnerTest) error) {
 	TestBackendStatusUpdate,
 	test_backends_status,
+	test_bucket_update,
 	test_common_read,
 	test_bucket_file_update,
 	test_backend_slowdown,
@@ -1182,7 +1185,6 @@ var tests = [](func(t *BackrunnerTest) error) {
 	test_stats_update,
 	test_bucket_delete,
 	test_bucket_bulk_delete,
-	test_bucket_update,
 	test_write_failed,
 	test_uniform_free_space,
 }
@@ -1208,11 +1210,9 @@ func update_log(file, msg string) {
 }
 
 func Start(base, proxy_path string) {
-
 	bt := &BackrunnerTest {
 		base: base,
 		server_log: fmt.Sprintf("%s/server.log", base),
-		test_log: fmt.Sprintf("%s/backrunner.log", base),
 		proxy_log: fmt.Sprintf("%s/proxy.log", base),
 		client: &http.Client{},
 		ell: nil,
@@ -1275,14 +1275,12 @@ func Start(base, proxy_path string) {
 		msg := fmt.Sprintf("TEST-STARTED: %s", FunctionName(t))
 		update_log(bt.proxy_log, msg)
 		update_log(bt.server_log, msg)
-		update_log(bt.test_log, msg)
 
 		err := t(bt)
 
 		msg = fmt.Sprintf("TEST-COMPLETED: %s: %s", FunctionName(t), TestResult(err))
 		update_log(bt.proxy_log, msg)
 		update_log(bt.server_log, msg)
-		update_log(bt.test_log, msg)
 
 		fmt.Printf("%s: %s\n", FunctionName(t), TestResult(err))
 
