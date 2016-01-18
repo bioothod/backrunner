@@ -903,6 +903,7 @@ func (bctl *BucketCtl) ReadBucketConfig() (err error) {
 	}
 
 	new_buckets := make([]*Bucket, 0, 0)
+	new_back_buckets := make([]*Bucket, 0, 0)
 
 	for _, name := range strings.Split(string(data), "\n") {
 		if len(name) > 0 {
@@ -923,6 +924,24 @@ func (bctl *BucketCtl) ReadBucketConfig() (err error) {
 		return err
 	}
 
+	back_names := make([]string, 0)
+	bctl.Lock()
+	for _, back_bucket := range bctl.BackBucket {
+		back_names = append(back_names, back_bucket.Name)
+	}
+	bctl.Unlock()
+
+	for _, name := range back_names {
+		b, err := ReadBucket(bctl.e, name)
+		if err != nil {
+			log.Printf("config: could not read bucket: %s: %v\n", name, err)
+			continue
+		}
+
+		new_back_buckets = append(new_back_buckets, b)
+		log.Printf("config: new back bucket: %s\n", b.Meta.String())
+	}
+
 	stat, err := bctl.e.Stat()
 	if err != nil {
 		return err
@@ -930,10 +949,12 @@ func (bctl *BucketCtl) ReadBucketConfig() (err error) {
 
 	bctl.Lock()
 	bctl.Bucket = new_buckets
+	bctl.BackBucket = new_back_buckets
 	err = bctl.BucketStatUpdateNolock(stat)
 	bctl.Unlock()
 
-	log.Printf("Bucket config has been updated, there are %d writable buckets\n", len(new_buckets))
+	log.Printf("Bucket config has been updated, there are %d writable buckets and %d back buckets\n",
+		len(new_buckets), len(new_back_buckets))
 	return nil
 }
 
