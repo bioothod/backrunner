@@ -18,6 +18,7 @@ build:
 	rm -f backrunner bmeta
 	go build -o backrunner ${GO_LDFLAGS} proxy.go
 	go build -o bmeta meta/bmeta.go
+	go build -o btest ${GO_LDFLAGS} test/btest.go
 
 install: build
 	cp -rf backrunner bmeta ${GOPATH}/bin/
