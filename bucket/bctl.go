@@ -670,9 +670,9 @@ func (bctl *BucketCtl) Stream(bname, key string, w http.ResponseWriter, req *htt
 
 	if offset != 0 || size != 0 {
 		if size == 0 {
-			req.Header.Add("Range", fmt.Sprintf("bytes=%d-", offset))
+			req.Header.Set("Range", fmt.Sprintf("bytes=%d-", offset))
 		} else {
-			req.Header.Add("Range", fmt.Sprintf("bytes=%d-%d", offset, offset + size - 1))
+			req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", offset, offset + size - 1))
 		}
 	}
 
