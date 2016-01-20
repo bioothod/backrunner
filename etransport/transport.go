@@ -39,8 +39,6 @@ func (e *Elliptics) DataSession(req *http.Request) (s *elliptics.Session, err er
 		return
 	}
 
-	s.SetTimeout(40)
-
 	values := req.URL.Query()
 	var val uint64
 
