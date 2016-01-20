@@ -583,6 +583,14 @@ func test_big_bucket_upload(t *BackrunnerTest) error {
 		}
 
 		checks := []check {
+			check{ offset: uint64(rand.Int31n(total_size/10)), size: uint64(total_size/10 + rand.Int31n(total_size/10))},
+		}
+		err = t.check_key_content(bucket, key, t.all_allowed_user, t.all_allowed_token, buf, checks, true)
+		if err != nil {
+			return err
+		}
+
+		checks = []check {
 			check{ offset: 0, size: uint64(total_size)},
 			check{ offset: uint64(rand.Int31n(total_size/10)), size: uint64(total_size/10 + rand.Int31n(total_size/10))},
 			check{ offset: uint64(rand.Int31n(total_size/10)), size: uint64(total_size/10 + rand.Int31n(total_size/10))},
