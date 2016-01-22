@@ -1,19 +1,20 @@
-FROM ubuntu:trusty
+#FROM ubuntu:trusty
+FROM reverbrain/backrunner:1.5.2.0.15
 
-RUN	echo "deb http://repo.reverbrain.com/trusty/ current/amd64/" > /etc/apt/sources.list.d/reverbrain.list && \
-	echo "deb http://repo.reverbrain.com/trusty/ current/all/" >> /etc/apt/sources.list.d/reverbrain.list && \
-	apt-get install -y curl && \
-	curl http://repo.reverbrain.com/REVERBRAIN.GPG | apt-key add - && \
-	apt-get update && \
-	apt-get upgrade -y && \
-	apt-get install -y curl git elliptics-client elliptics-dev g++ make && \
-	cp -f /usr/share/zoneinfo/posix/W-SU /etc/localtime && \
-	echo Europe/Moscow > /etc/timezeone
+#RUN	echo "deb http://repo.reverbrain.com/trusty/ current/amd64/" > /etc/apt/sources.list.d/reverbrain.list && \
+#	echo "deb http://repo.reverbrain.com/trusty/ current/all/" >> /etc/apt/sources.list.d/reverbrain.list && \
+#	apt-get install -y curl && \
+#	curl http://repo.reverbrain.com/REVERBRAIN.GPG | apt-key add - && \
+#	apt-get update && \
+#	apt-get upgrade -y && \
+#	apt-get install -y curl git elliptics-client elliptics-dev g++ make && \
+#	cp -f /usr/share/zoneinfo/posix/W-SU /etc/localtime && \
+#	echo Europe/Moscow > /etc/timezeone
 
-RUN	VERSION=go1.5.2 && \
-	curl -O https://storage.googleapis.com/golang/$VERSION.linux-amd64.tar.gz && \
-	tar -C /usr/local -xf $VERSION.linux-amd64.tar.gz && \
-	rm -f $VERSION.linux-amd64.tar.gz
+#RUN	VERSION=go1.5.2 && \
+#	curl -O https://storage.googleapis.com/golang/$VERSION.linux-amd64.tar.gz && \
+#	tar -C /usr/local -xf $VERSION.linux-amd64.tar.gz && \
+#	rm -f $VERSION.linux-amd64.tar.gz
 
 RUN	git config --global user.email "zbr@ioremap.net" && \
 	git config --global user.name "Evgeniy Polyakov" && \
