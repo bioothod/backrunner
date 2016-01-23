@@ -1,0 +1,16 @@
+1.5.2.0.16 be033c5b177e6039cca5b70b4213ed8dfba10bf4
+Use elliptics 2.26.10.1
+Added docker files for cached/non-cached builds
+elliptics: ignore ioflags/cflags/trace_id/x-request parsing error, create session nevertheless
+added many range/size/offset tests
+bucket: if there is offset/size uri parameter, do not use data in range header
+test: do not split proxy/test logs, use one for both. Moved test_bucket_update() and added some debug prints
+bucket: update back buckets periodically with writable buckets, this allows its metadata update
+test: fixed status code and number of operations checks, minor cleanups
+bucket: when selecting bucket, multipla its internal pain to content length, since internal pain is performance per byte
+bucket: increase pain counter proportionally to the amount of free space, indent long lines
+bucket: get rid of defrag scan, it was moved into bucket-edge
+bucket: added safety checks when decoding bucket metadata
+docker: remove previously compiled packages for safety
+docker: newer go version, remove old sources, use make
+... many other features from the older builds, which didn't get into this changelog
