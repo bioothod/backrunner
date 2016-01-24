@@ -765,17 +765,6 @@ func (proxy *bproxy) getTimeoutServer(addr string, handler http.Handler) *http.S
 	}
 }
 
-type stringslice []string
-
-func (str *stringslice) String() string {
-	return fmt.Sprintf("%d", *str)
-}
-
-func (str *stringslice) Set(value string) error {
-	*str = append(*str, value)
-	return nil
-}
-
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
