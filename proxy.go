@@ -716,6 +716,8 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 				}
 
 				if method_matched {
+					log.Printf("url: %s, handler: %s, time-since-start: %s\n",
+						req.URL.String(), hstrings[1], time.Since(start).String())
 					reply = h.Function(w, req, param_strings...)
 				} else {
 					reply.err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
@@ -744,10 +746,10 @@ func generic_handler(w http.ResponseWriter, req *http.Request) {
 		h.Estimator.Push(content_length, reply.status)
 	}
 
-	log.Printf("access_log: method: '%s', client: '%s', x-fwd: '%v', path: '%s', encoded-uri: '%s', status: %d, size: %d, time: %.3f ms, err: '%v'\n",
-		req.Method, req.RemoteAddr, req.Header.Get("X-Forwarded-For"),
-		path, req.URL.RequestURI(), reply.status, content_length,
-		float64(duration.Nanoseconds()) / 1000000.0, msg)
+	log.Printf("access_log: method: '%s', client: '%s', x-fwd: '%v', path: '%s', encoded-uri: '%s', " +
+		"status: %d, size: %d, time: %.3f ms, err: '%v'\n",
+		req.Method, req.RemoteAddr, req.Header.Get("X-Forwarded-For"), path, req.URL.RequestURI(),
+		reply.status, content_length, float64(duration.Nanoseconds()) / 1000000.0, msg)
 
 	if reply.err != nil {
 		http.Error(w, reply.err.Error(), reply.status)
