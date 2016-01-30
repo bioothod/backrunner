@@ -1,3 +1,8 @@
+1.5.2.0.17
+proxy: print start time for handler call
+proxy: run GC in separate gorouting, set large enough GC threshold to disable background GC
+proxy: remove unused code
+
 1.5.2.0.16 be033c5b177e6039cca5b70b4213ed8dfba10bf4
 Use elliptics 2.26.10.1
 Added docker files for cached/non-cached builds
