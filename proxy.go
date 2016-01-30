@@ -20,6 +20,7 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -766,8 +767,6 @@ func (proxy *bproxy) getTimeoutServer(addr string, handler http.Handler) *http.S
 }
 
 func main() {
-	runtime.GOMAXPROCS(runtime.NumCPU())
-
 	buckets := flag.String("buckets", "", "buckets file (file format: new-line separated list of bucket names)")
 	config_file := flag.String("config", "", "Transport config file")
 	flag.Parse()
@@ -816,6 +815,20 @@ func main() {
 	if err != nil {
 		log.Fatalf("Could not create new bucket controller: %v", err)
 	}
+
+	go func() {
+		debug.SetGCPercent(10000)
+		var stats debug.GCStats
+
+		for {
+			time.Sleep(5 * time.Second)
+
+			runtime.GC()
+			debug.ReadGCStats(&stats)
+
+			log.Printf("gc: start: %s, duration: %s\n", stats.LastGC.String(), stats.Pause[0].String())
+		}
+	}()
 
 	if len(conf.Proxy.HTTPSAddress) != 0 {
 		if len(conf.Proxy.CertFile) == 0 {
