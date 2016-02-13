@@ -234,6 +234,15 @@ func (bctl *BucketCtl) GetBucket(key string, req *http.Request) (bucket *Bucket)
 		s.SetNamespace(b.Name)
 
 		for group_id, sg := range b.Group {
+			_, _, err := s.LookupBackend(key, group_id)
+			if err != nil {
+				// there is no route to the requested group, penalize this bucket
+				bs.ErrorGroups = append(bs.ErrorGroups, group_id)
+
+				bs.Pain += PainNoStats
+				continue
+			}
+
 			st, err := sg.FindStatBackendKey(s, key, group_id)
 			if err != nil {
 				// there is no statistics for given address+backend, which should host our data
