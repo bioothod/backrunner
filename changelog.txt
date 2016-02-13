@@ -1,3 +1,9 @@
+0.2.18
+New versioning scheme
+bucket: penalize bucket if current route table doesn't have entry for requested group
+docker: increase base version and go version
+elliptics-go: increase channel sizes to fix async c++ calls which synchronously invoke callbacks
+
 1.5.2.0.17
 proxy: print start time for handler call
 proxy: run GC in separate gorouting, set large enough GC threshold to disable background GC
