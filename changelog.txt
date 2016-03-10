@@ -1,3 +1,6 @@
+0.2.20
+proxy: get rid of manual GC invocation
+
 0.2.19
 proxy: added handler which allows local config update, it may also disable automatic config update from file or from elliptics for some time
 config: removed Defrag* options, defragmentation selection logic was moved into separate project
