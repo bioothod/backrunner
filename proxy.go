@@ -855,20 +855,6 @@ func main() {
 		log.Fatalf("Could not create new bucket controller: %v", err)
 	}
 
-	go func() {
-		debug.SetGCPercent(10000)
-		var stats debug.GCStats
-
-		for {
-			time.Sleep(5 * time.Second)
-
-			runtime.GC()
-			debug.ReadGCStats(&stats)
-
-			log.Printf("gc: start: %s, duration: %s\n", stats.LastGC.String(), stats.Pause[0].String())
-		}
-	}()
-
 	if len(conf.Proxy.HTTPSAddress) != 0 {
 		if len(conf.Proxy.CertFile) == 0 {
 			log.Fatalf("If you have specified HTTPS address there MUST be certificate file option")
