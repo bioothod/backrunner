@@ -1,3 +1,8 @@
+0.2.21
+proxy: put back manual GC invocation
+bucket: do not return error if config has been read, but not updated because automatic update is disabled for some time
+config: use 'redirect-token' key name consistently with other names
+
 0.2.20
 proxy: get rid of manual GC invocation
 
