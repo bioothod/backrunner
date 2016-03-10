@@ -1,5 +1,5 @@
 #FROM ubuntu:trusty
-FROM reverbrain/backrunner:1.6.1-0.2.19
+FROM reverbrain/backrunner:1.6-0.2.19
 
 #RUN	echo "deb http://repo.reverbrain.com/trusty/ current/amd64/" > /etc/apt/sources.list.d/reverbrain.list && \
 #	echo "deb http://repo.reverbrain.com/trusty/ current/all/" >> /etc/apt/sources.list.d/reverbrain.list && \
