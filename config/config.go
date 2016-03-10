@@ -162,22 +162,6 @@ type ProxyClientConfig struct {
 	// headers added to every reply in a 'key: value' format
 	Headers map[string]string		`json:"headers"`
 
-	// rate of free space in given backend to start scanning for defragmentation
-	// i.e. only if free space rate is less than @DefragFreeSpaceLimit, given backend can be considered for defragmentation
-	// defragmentation is limited by number of backends per server, number of buckets per cluster and so on
-	// defragmentation percentage in the low-level backend is still considered when defrag starts
-	// this caonfig parameter only specifies backends which could be defragmented, but it doesn't mean they will be
-	DefragFreeSpaceLimit float64		`json:"defrag-free-space-limit"`
-
-	// only run defragmentation in backends which will free at least @DefragRemovedSpaceLimit byte ratio
-	DefragRemovedSpaceLimit float64		`json:"defrag-removed-space-limit"`
-
-	// maximum number of buckets where defragmentation is allowed to run in parallel
-	DefragMaxBuckets int			`json:"defrag-max-buckets"`
-
-	// maximum number of backends being defragmented on any single server node
-	DefragMaxBackendsPerServer int		`json:"defrag-max-backends-per-server"`
-
 	// all URL path strings which do not match registered handlers are being read
 	// as static objects living in @Root directory
 	// for example requesting http://example.com/crossdomain.xml URL
