@@ -151,7 +151,7 @@ type ProxyClientConfig struct {
 	RedirectPort int			`json:"redirect-port"`
 
 	// all redirect replies will contain @auth.AuthHeaderStr 'Authorization' header generated with given token
-	RedirectToken string
+	RedirectToken string			`json:"redirect-token"`
 
 	// number of seconds redirect signature is valid since @Signtime, streaming module will not return data if timeout has passed
 	RedirectSignatureTimeout int		`json:"redirect-signature-timeout"`
