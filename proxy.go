@@ -20,6 +20,8 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -852,6 +854,20 @@ func main() {
 	if err != nil {
 		log.Fatalf("Could not create new bucket controller: %v", err)
 	}
+
+	go func() {
+		var stats debug.GCStats
+
+		for {
+			time.Sleep(1 * time.Second)
+
+			runtime.GC()
+			debug.ReadGCStats(&stats)
+
+			log.Printf("gc: start: %s, duration: %s\n", stats.LastGC.String(), stats.Pause[0].String())
+		}
+	}()
+
 
 	if len(conf.Proxy.HTTPSAddress) != 0 {
 		if len(conf.Proxy.CertFile) == 0 {
