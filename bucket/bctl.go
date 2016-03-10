@@ -1029,8 +1029,9 @@ func (bctl *BucketCtl) ReadProxyConfig() error {
 	}
 
 	if time.Now().Before(bctl.DisableConfigUpdateUntil) {
-		return fmt.Errorf("Proxy config has been read, but automatic config update is disabled until %s\n",
+		log.Printf("Proxy config has been read, but automatic config update is disabled until %s\n",
 			bctl.DisableConfigUpdateUntil.String())
+		return nil
 	}
 
 	bctl.Lock()
