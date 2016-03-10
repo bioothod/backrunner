@@ -12,6 +12,7 @@ import (
 	"github.com/bioothod/backrunner/etransport"
 	"github.com/bioothod/backrunner/range"
 	"github.com/bioothod/backrunner/reply"
+	"github.com/kr/pretty"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -540,6 +541,37 @@ func proxy_stat_handler(w http.ResponseWriter, req *http.Request, strings ...str
 	return GoodReply()
 }
 
+func update_local_config_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
+	conf := &config.ProxyConfig {}
+
+	err := conf.LoadIO(req.Body)
+	if err != nil {
+		err = errors.NewKeyError(req.URL.String(), http.StatusBadRequest,
+			fmt.Sprintf("conf: could not parse config: %q", err))
+		return Reply {
+			err: err,
+			status: http.StatusBadRequest,
+		}
+	}
+
+	conf.Proxy.RedirectToken = proxy.bctl.Conf.Proxy.RedirectToken
+	diff := pretty.Diff(proxy.bctl.Conf, conf)
+	for _, d := range diff {
+		log.Printf("update_local_config_handler: diff: %s\n", d)
+	}
+
+	proxy.bctl.Lock()
+	proxy.bctl.Conf = conf
+	proxy.bctl.DisableConfigUpdateUntil = time.Now().Add(time.Second * time.Duration(conf.Proxy.DisableConfigUpdateForSeconds))
+	proxy.bctl.Unlock()
+
+	log.Printf("update_local_config_handler: next automatic config update is only allowed in %d seconds at %s\n",
+		conf.Proxy.DisableConfigUpdateForSeconds,
+		proxy.bctl.DisableConfigUpdateUntil.String())
+
+	return GoodReply()
+}
+
 type handler struct {
 	// minimal number of path components after /handler/ needed to run this handler
 	Params			int				`json:"-"`
@@ -603,6 +635,11 @@ var proxy_handlers = map[string]*handler {
 		Params: 0,
 		Methods: []string{"GET"},
 		Function: proxy_stat_handler,
+	},
+	"update_local_config": &handler{
+		Params: 0,
+		Methods: []string{"POST"},
+		Function: update_local_config_handler,
 	},
 	"/": &handler{
 		Params: 0,

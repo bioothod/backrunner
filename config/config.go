@@ -185,6 +185,8 @@ type ProxyClientConfig struct {
 	// Reader/Writer elliptics IO flags
 	ReaderIOFlags uint32			`json:"reader-io-flags"`
 	WriterIOFlags uint32			`json:"writer-io-flags"`
+
+	DisableConfigUpdateForSeconds uint32	`json:"disable-config-update-for-seconds"`
 }
 
 type ProxyConfig struct {

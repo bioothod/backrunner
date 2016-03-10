@@ -87,6 +87,9 @@ type BucketCtl struct {
 
 	proxy_config_path	string
 	Conf			*config.ProxyConfig
+	// after config has been locally updated via HTTP request,
+	// it disables automatic config update for time period specified in config
+	DisableConfigUpdateUntil	time.Time
 
 	signals			chan os.Signal
 
@@ -1023,6 +1026,11 @@ func (bctl *BucketCtl) ReadProxyConfig() error {
 		if err != nil {
 			return fmt.Errorf("could not load proxy config file '%s': %v", bctl.proxy_config_path, err)
 		}
+	}
+
+	if time.Now().Before(bctl.DisableConfigUpdateUntil) {
+		return fmt.Errorf("Proxy config has been read, but automatic config update is disabled until %s\n",
+			bctl.DisableConfigUpdateUntil.String())
 	}
 
 	bctl.Lock()
