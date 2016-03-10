@@ -1109,6 +1109,8 @@ type BucketCtlStat struct {
 	BuildDate		string
 	LastCommit		string
 	EllipticsGoLastCommit	string
+
+	ProxyConfig		config.ProxyConfig
 }
 
 func (bctl *BucketCtl) NewBucketCtlStat() (*BucketCtlStat) {
@@ -1138,7 +1140,12 @@ func (bctl *BucketCtl) NewBucketCtlStat() (*BucketCtlStat) {
 		BuildDate:		config.BuildDate,
 		LastCommit:		config.LastCommit,
 		EllipticsGoLastCommit:	config.EllipticsGoLastCommit,
+
+		ProxyConfig:		*bctl.Conf,
 	}
+
+	// do not show secure tokens
+	ctl.ProxyConfig.Proxy.RedirectToken = ""
 
 	return ctl
 }
