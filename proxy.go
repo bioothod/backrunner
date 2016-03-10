@@ -20,8 +20,6 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"runtime"
-	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync/atomic"
