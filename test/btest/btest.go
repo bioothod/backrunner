@@ -216,7 +216,8 @@ func test_backends_status(t *BackrunnerTest) error {
 	for i := 0; i < 10; i++ {
 		var st *elliptics.DnetBackendsStatus = nil
 
-		for st = range s.BackendsStatus(&addr) {
+		for t := range s.BackendsStatus(&addr).Out {
+			st = t.(*elliptics.DnetBackendsStatus)
 		}
 
 		if st.Error != nil {
@@ -231,8 +232,10 @@ func test_backends_status(t *BackrunnerTest) error {
 		}
 
 		var backend_id int32 = 1
-		for _ = range s.BackendDisable(&addr, backend_id) {}
-		for st = range s.BackendsStatus(&addr) {}
+		for _ = range s.BackendDisable(&addr, backend_id).Out {}
+		for t := range s.BackendsStatus(&addr).Out {
+			st = t.(*elliptics.DnetBackendsStatus)
+		}
 		if st.Error != nil {
 			return st.Error
 		}
@@ -253,7 +256,7 @@ func test_backends_status(t *BackrunnerTest) error {
 			}
 		}
 
-		for _ = range s.BackendEnable(&addr, 1) {}
+		for _ = range s.BackendEnable(&addr, 1).Out {}
 	}
 
 	return nil
@@ -1254,7 +1257,7 @@ func test_backend_slowdown(t *BackrunnerTest) error {
 
 	var backend_id int32 = 1
 	var delay uint32 = 100
-	for _ = range s.BackendSetDelay(&addr, backend_id, delay) {
+	for _ = range s.BackendSetDelay(&addr, backend_id, delay).Out {
 	}
 
 	time.Sleep(2 * time.Second)

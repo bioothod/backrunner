@@ -5,10 +5,12 @@ import (
 	"github.com/bioothod/elliptics-go/elliptics"
 )
 
-func check_backend(ch <-chan *elliptics.DnetBackendsStatus, s *elliptics.Session, addr *elliptics.DnetAddr, backend_id int32, ro bool, delay uint32) error {
+func check_backend(ch *elliptics.DChannel, s *elliptics.Session, addr *elliptics.DnetAddr, backend_id int32, ro bool, delay uint32) error {
 	checked := false
 
-	for st := range ch {
+	for t := range ch.Out {
+		st := t.(*elliptics.DnetBackendsStatus)
+
 		if st.Error != nil {
 			return st.Error
 		}
@@ -34,7 +36,9 @@ func check_backend(ch <-chan *elliptics.DnetBackendsStatus, s *elliptics.Session
 	}
 
 	checked = false
-	for st := range s.BackendsStatus(addr) {
+	for t := range s.BackendsStatus(addr).Out {
+		st := t.(*elliptics.DnetBackendsStatus)
+
 		if st.Error != nil {
 			return st.Error
 		}
