@@ -10,7 +10,7 @@ RUN	echo "deb http://repo.reverbrain.com/trusty/ current/amd64/" > /etc/apt/sour
 	cp -f /usr/share/zoneinfo/posix/W-SU /etc/localtime && \
 	echo Europe/Moscow > /etc/timezeone
 
-RUN	VERSION=go1.6 && \
+RUN	VERSION=go1.5.3 && \
 	curl -O https://storage.googleapis.com/golang/$VERSION.linux-amd64.tar.gz && \
 	tar -C /usr/local -xf $VERSION.linux-amd64.tar.gz && \
 	rm -f $VERSION.linux-amd64.tar.gz
