@@ -1229,7 +1229,10 @@ func (bctl *BucketCtl) DumpProfileFile(add_time bool) {
 }
 
 func (bctl *BucketCtl) DumpProfileSingle(out io.Writer, name string) {
-	pprof.Lookup(name).WriteTo(out, 2)
+	data := pprof.Lookup(name)
+	if data != nil {
+		data.WriteTo(out, 2)
+	}
 }
 
 func (bctl *BucketCtl) DumpProfile(out io.Writer, types []string) {
