@@ -1,3 +1,6 @@
+0.2.23
+proxy: allow different profile collection over http
+
 0.2.22
 Switched to new dynamic channels elliptics.DChannel instead of plain channels
 
