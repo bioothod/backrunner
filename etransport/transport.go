@@ -99,29 +99,29 @@ func (e *Elliptics) Stat() (stat *elliptics.DnetStat, err error) {
 	return
 }
 
-func NewEllipticsTransport(conf *config.ProxyConfig) (e *Elliptics, err error) {
+func NewEllipticsTransport(econf *config.EllipticsClientConfig) (e *Elliptics, err error) {
 	e = &Elliptics {
 		prev_stat: nil,
 	}
 
-	if len(conf.Elliptics.LogFile) == 0 || len(conf.Elliptics.LogLevel) == 0 {
+	if len(econf.LogFile) == 0 || len(econf.LogLevel) == 0 {
 		log.Fatal("'log-file' and 'log-level' config parameters must be set")
 	}
 
-	e.LogFile, err = os.OpenFile(conf.Elliptics.LogFile, os.O_RDWR | os.O_APPEND | os.O_CREATE, 0644)
+	e.LogFile, err = os.OpenFile(econf.LogFile, os.O_RDWR | os.O_APPEND | os.O_CREATE, 0644)
 	if err != nil {
-		log.Fatalf("Could not open log file '%s': %q", conf.Elliptics.LogFile, err)
+		log.Fatalf("Could not open log file '%s': %q", econf.LogFile, err)
 	}
 
-	log.SetPrefix(conf.Elliptics.LogPrefix)
+	log.SetPrefix(econf.LogPrefix)
 	log.SetOutput(e.LogFile)
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
 	var default_config elliptics.NodeConfig
-	if conf.Elliptics.Node != default_config {
-		e.Node, err = elliptics.NewNodeConfig(conf.Elliptics.LogFile, conf.Elliptics.LogLevel, &conf.Elliptics.Node)
+	if econf.Node != default_config {
+		e.Node, err = elliptics.NewNodeConfig(econf.LogFile, econf.LogLevel, &econf.Node)
 	} else {
-		e.Node, err = elliptics.NewNode(conf.Elliptics.LogFile, conf.Elliptics.LogLevel)
+		e.Node, err = elliptics.NewNode(econf.LogFile, econf.LogLevel)
 	}
 
 	if err != nil {
@@ -129,19 +129,19 @@ func NewEllipticsTransport(conf *config.ProxyConfig) (e *Elliptics, err error) {
 	}
 
 
-	if len(conf.Elliptics.Remote) == 0 {
+	if len(econf.Remote) == 0 {
 		log.Fatal("'remote' config parameter must be set")
 	}
 
-	if len(conf.Elliptics.MetadataGroups) == 0 {
+	if len(econf.MetadataGroups) == 0 {
 		log.Fatal("'metadata-groups' config parameter must be set")
 	}
 
-	e.MetadataGroups = conf.Elliptics.MetadataGroups
+	e.MetadataGroups = econf.MetadataGroups
 
-	err = e.Node.AddRemotes(conf.Elliptics.Remote)
+	err = e.Node.AddRemotes(econf.Remote)
 	if err != nil {
-		log.Fatalf("Could not connect to any remote node from %q: %q", conf.Elliptics.Remote, err)
+		log.Fatalf("Could not connect to any remote node from %q: %q", econf.Remote, err)
 	}
 
 	return
