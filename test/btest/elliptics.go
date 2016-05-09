@@ -115,7 +115,7 @@ func (bt *BackrunnerTest) StartEllipticsClientProxy(proxy_path string) {
 		log.Fatalf("Could not save client transport config: %v", err)
 	}
 
-	bt.ell, err = etransport.NewEllipticsTransport(bt.conf)
+	bt.ell, err = etransport.NewEllipticsTransport(&bt.conf.Elliptics)
 	if err != nil {
 		log.Fatal("Could not connect to elliptics server %v: %v", bt.elliptics_address, err)
 	}

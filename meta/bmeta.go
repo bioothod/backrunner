@@ -123,7 +123,7 @@ func main() {
 		log.Fatalf("Could not load config file '%s': %v", *config_file, err)
 	}
 
-	ell, err := etransport.NewEllipticsTransport(conf)
+	ell, err := etransport.NewEllipticsTransport(&conf.Elliptics)
 	if err != nil {
 		log.Fatalf("Could not create Elliptics transport: %v", err)
 	}
