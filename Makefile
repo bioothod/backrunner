@@ -1,5 +1,9 @@
 #!/usr/bin/env make
 
+GOROOT=/usr/local/go
+#GOROOT=/usr/local/go1.6
+#GOROOT=/usr/local/go1.5.3
+
 backrunner=github.com/bioothod/backrunner
 backrunner_config=${backrunner}/config
 
@@ -16,9 +20,9 @@ all: build
 
 build:
 	rm -f backrunner bmeta
-	go build -o backrunner ${GO_LDFLAGS} proxy.go
-	go build -o bmeta meta/bmeta.go
-	go build -o btest ${GO_LDFLAGS} test/btest.go
+	${GOROOT}/bin/go build -o backrunner ${GO_LDFLAGS} proxy.go
+	${GOROOT}/bin/go build -o bmeta meta/bmeta.go
+	${GOROOT}/bin/go build -o btest ${GO_LDFLAGS} test/btest.go
 
 install: build
 	cp -rf backrunner bmeta ${GOPATH}/bin/
