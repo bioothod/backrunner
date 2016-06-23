@@ -13,12 +13,13 @@ import (
 	"github.com/bioothod/backrunner/range"
 	"github.com/bioothod/backrunner/reply"
 	"github.com/kr/pretty"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
-	_ "path"
+	"path"
 	"runtime"
 	"runtime/debug"
 	"strconv"
@@ -400,10 +401,33 @@ func bulk_delete_handler(w http.ResponseWriter, req *http.Request, strings ...st
 }
 
 func common_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
-	x := make([]byte, 10 * 1024 * 1024)
+	if len(proxy.bctl.Conf.Proxy.Root) == 0 {
+		err := errors.NewKeyError(req.URL.String(), http.StatusServiceUnavailable,
+			fmt.Sprintf("common: root option is not configured, reading files is being denied"))
+		return Reply {
+			err: err,
+			status: http.StatusServiceUnavailable,
+		}
+	}
 
-	object := "/tmp/test.txt"
-	f, err := os.Open(object)
+	if len(strings) == 0 {
+		w.WriteHeader(http.StatusOK)
+		return GoodReply()
+	}
+
+	object := path.Clean(strings[0])
+	if object == bucket.ProfilePath || object == "." {
+		err := errors.NewKeyError(req.URL.String(), http.StatusNotFound,
+			fmt.Sprintf("common: could not read file '%s'", object))
+		return Reply {
+			err: err,
+			status: http.StatusNotFound,
+		}
+	}
+
+	key := proxy.bctl.Conf.Proxy.Root + "/" + object
+
+	data, err := ioutil.ReadFile(key)
 	if err != nil {
 		log.Printf("common: url: %s, object: '%s', error: %s\n", req.URL.String(), object, err)
 
@@ -414,14 +438,11 @@ func common_handler(w http.ResponseWriter, req *http.Request, strings ...string)
 			status: http.StatusNotFound,
 		}
 	}
-	defer f.Close()
-
-	n, err := f.Read(x)
 
 	w.WriteHeader(http.StatusOK)
-	w.Write(x[:n])
+	w.Write(data)
 
-	return GoodReplyLength(uint64(n))
+	return GoodReplyLength(uint64(len(data)))
 }
 
 func profile_handler(w http.ResponseWriter, req *http.Request, strings ...string) Reply {
