@@ -1,3 +1,9 @@
+0.2.24
+proxy: reverted test changes which broke static content delivery
+makefile: use custom GOROOT
+elliptics: use elliptics client config in transport api, not the whole proxy conf
+docker: updated go to 1.6.2
+
 0.2.23
 proxy: allow different profile collection over http
 
