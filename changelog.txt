@@ -1,3 +1,6 @@
+0.2.25
+Build with the latest elliptics-go (bfcde60fca), which fixes read size of the small files
+
 0.2.24
 proxy: reverted test changes which broke static content delivery
 makefile: use custom GOROOT
