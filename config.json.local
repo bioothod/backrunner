@@ -1,8 +1,8 @@
 {
 	"elliptics": {
-		"log-file": "/dev/stdout",
-		"log-file1": "backrunner.log",
-		"log-level": "info",
+		"log-file1": "/dev/stdout",
+		"log-file": "backrunner.log",
+		"log-level": "error",
 		"log-prefix": "backrunner: ",
 		"remote": [
 			"qweqwe:1024:2",
@@ -39,10 +39,6 @@
 			"X-Ell-Some-Header": "this is a header data",
 			"XXXXXXX": "YYYYYY"
 		},
-		"defrag-free-space-limit": 0.4,
-		"defrag-removed-space-limit": 0.1,
-		"defrag-max-buckets": 3,
-		"defrag-max-backends-per-server": 2,
 		"root": "/mnt/disk/elliptics/root",
 		"content-types": {
 			"big" : "octet/stream",
