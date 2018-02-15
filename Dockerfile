@@ -8,7 +8,7 @@ RUN	echo "deb http://repo.reverbrain.com/trusty/ current/amd64/" > /etc/apt/sour
 	apt-get upgrade -y && \
 	apt-get install -y curl git elliptics-client elliptics-dev g++ make && \
 	cp -f /usr/share/zoneinfo/posix/W-SU /etc/localtime && \
-	echo Europe/Moscow > /etc/timezeone
+	echo Etc/UTC > /etc/timezeone
 
 RUN	VERSION=go1.6.2 && \
 	curl -O https://storage.googleapis.com/golang/$VERSION.linux-amd64.tar.gz && \
